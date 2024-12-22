@@ -1,6 +1,7 @@
 import cv2
 from ultralytics import YOLO
 import requests
+import numpy as np
 # Load the model
 
 
@@ -19,8 +20,11 @@ def getColours(cls_num):
     (cls_num // len(base_colors)) % 256 for i in range(3)]
     return tuple(color)
 
-
+skip_frame_count = -1
 while True:
+    skip_frame_count+=1
+    if skip_frame_count % 500 != 0:
+        continue
     ret, frame = videoCap.read()
     if not ret:
         continue
@@ -55,8 +59,9 @@ while True:
                 cv2.putText(frame, f'{classes_names[int(box.cls[0])]} {box.conf[0]:.2f}', (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 1, colour, 2)
                 
     # show the image
-    buffer = cv2.imencode('jpg', frame)
-    frame = buffer.tobyte
+    cv2.imshow('img',frame)
+    _,buffer = cv2.imencode('.jpg', frame)
+    frame = buffer.tobytes()
 
     try:
         requests.post(CLOUD_SERVER_URL, files = {"frame":frame})

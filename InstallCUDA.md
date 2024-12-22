@@ -6,6 +6,7 @@
 ----
 ## 前置作業
 首先，先確認顯示卡是否支援CUDA
+
 在powershell/cmd中輸入
 ```
 nvidia-smi
@@ -16,6 +17,7 @@ nvidia-smi
 
 ## CUDA(Opt)
 詳情可參考這篇文章[CSDN](https://blog.csdn.net/bja20040205/article/details/135970465)
+
 到[NVIDIA官網](https://developer.nvidia.com/cuda-toolkit-archive)下載有支援的CUDA版本
 
 ---
@@ -26,7 +28,9 @@ nvidia-smi
 先到[Pytorch官網](https://pytorch.org/get-started/locally/)
 
 然後<font color = 'red'>先不要下載</font>
+
 找到[Previous Pytorch Version](https://pytorch.org/get-started/previous-versions/)，選擇版本(如v.2.5.0)
+
 然後看到適合到CUDA版本
 ```
 # CUDA 12.1
@@ -34,6 +38,7 @@ pip install torch==2.5.0 torchvision==0.20.0 torchaudio==2.5.0 --index-url https
 ```
 
 記住torch,torchvision和torchaudio的版本
+
 然後前往[--index-url](https://download.pytorch.org/whl/cu121)後下載對應的torch,torchvision和torchaudio
 
 
@@ -59,6 +64,7 @@ python
 yolo task=detect mode=predict conf=0.25 model=yolov8n.pt source='ultralytics/assets/bus.jpg'
 ```
 檢查
+
 如果是python 3.10以上會出現Import Error
 
 ---
