@@ -31,7 +31,7 @@ def fetch_mjpeg_stream(url):
             img = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
             cv2.imshow("img", img)
 
-            if cv2.waitKey(INTERVAL_TIME) == 'q':
+            if cv2.waitKey(INTERVAL_TIME) & 0xFF == 'q':
                 break
 
 fetch_mjpeg_stream(url)
