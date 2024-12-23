@@ -1,33 +1,23 @@
-from ultralytics import YOLO
 import cv2
-from cvzone.PoseModule import PoseDetector
+import mediapipe as mp
 
-def draw_plot_box(img, det_res, color=(0,0,255)):
-    for i, bbox in enumerate(det_res.boxes.xyxy):
-        x1,y1,x2,y2=list(map(int, bbox))
-        conf = det_res.boxes.conf[i]
-        cls = det_res.boxes.cls[i]
-        label = f'{det_res.names[int(cls)]}{float(conf):.2f}'
+mp_drawing = mp.solutions.drawing_utils
+mp_pose = mp.solutions.pose
+pose = mp_pose.Pose(min_detection_confidence=0.5,
+                    min_tracking_confidence=0.5)
+                    
 
-        cv2.rectangle(img, (x1,y1),(x2,y2),color, 2)
-        cv2.putText(img, label, (x1,y1-10),cv2.FONT_HERSHEY_SIMPLEX,0.5,color,2)
-    return img
+cap = cv2.VideoCapture('jntm.mp4')
 
-if __name__ == '__main__':
-    yolo = YOLO('yolov8n-pose.pt')
-    detector = PoseDetector()
+while True:
+    _,img=cap.read()
+    results = pose.process(img)
+    mp_drawing.draw_landmarks(
+            img,
+            results.pose_landmarks,
+            mp_pose.POSE_CONNECTIONS)
 
-    # cap = cv2.VideoCapture(0)
-    img = cv2.imread('bus.jpg')
-    while True:
-        # _, img = cap.read()
-        #results = yolo.predict(img)
-        img = detector.findPose(img)
-        imList, bboxInfo = detector.findPosition(img, bboxWithHands=False)
-        if bboxInfo:
-            center = bboxInfo["center"]
-            cv2.circle(img, center, 5, (0,0,255), cv2.FILLED)
-        #img = draw_plot_box(img, results[0])
-        cv2.imshow('img',img)
-        if cv2.waitKey(0) & 0xFF == ord('q'):
-            exit()
+    cv2.imshow("MediaPipe Pose", img)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+cv2.destroyAllWindows()
