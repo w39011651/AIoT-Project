@@ -1,6 +1,7 @@
 import urllib.request
 import cv2
 import numpy as np
+import math
 from YOLOPoseutil import predictor_person_pose, predictor_person_detection
 import urllib
 from YOLOPoseConstant import _CONNECTIONS, shoulder_press_joint_index
@@ -53,8 +54,11 @@ def plot_track(img, keypoints, prev_keypoints, line_color = (0,0,255))->cv2.Mat:
     下放: 手臂平行地面
     穩定: 水平移動不可太多
 
-    函數功能: 劃出軌跡，對動作打分
+    函數功能: 劃出軌跡
+    實現: 將所有移動過的點紀錄在list中, 在結束動作後畫出動作軌跡圖(可從暗到亮)
     """
+    global action_trail
+
     if prev_keypoints is None:
         return img
     
@@ -67,13 +71,29 @@ def plot_track(img, keypoints, prev_keypoints, line_color = (0,0,255))->cv2.Mat:
             if i >= 5 and i <= 10:
                 curr_x, curr_y = list(map(int, curr_point[:2]))
                 prev_x, prev_y = list(map(int, prev_point[:2]))
+                if distance((curr_x, curr_y),(prev_x, prev_y)) > 10.0:
+                    continue
+                if i == 10:
+                    action_trail.append((prev_x, prev_y))
                 if curr_x > 0 and curr_y > 0 and prev_x > 0 and prev_y > 0:
                     cv2.line(img, (prev_x, prev_y), (curr_x, curr_y), line_color, 2)    
-            
     return img
 
+def draw_trail(trail:list, fixed_height, fixed_width):
+    back_ground = np.ones((fixed_height, fixed_width), dtype=np.uint8)*255
+    trail_size = len(trail)
+    for i in range(1, trail_size):
+        cv2.line(back_ground, trail[i-1], trail[i], color=(0,0,255), thickness=2)
+    cv2.imshow('trail', back_ground)
+    if cv2.waitKey(0) & 0xFF == ord('q'):
+        cv2.destroyAllWindows()
+
+def distance(point1, point2)->float:
+    return math.sqrt((point1[0]- point2[0])**2 + (point1[1] - point2[1])**2)
+
 def show_video(my_video_path, self_camera = False):
-    global prev_person_pose
+    global prev_person_pose, img_height, img_width, action_trail
+
     cap = get_video(video_path=my_video_path, read_from_camera=self_camera)
     SKIP_FRAME_COUNTING = 500
     skip_frame_counting = -1
@@ -82,6 +102,8 @@ def show_video(my_video_path, self_camera = False):
         if not ret:
             print('Camera is not opened/video is not exist')
             break
+        if img_height is None and img_width is None:
+            img_height, img_width = frame.shape[:2]
         #img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         if skip_frame_counting % SKIP_FRAME_COUNTING != 0:
             skip_frame_counting+=1
@@ -98,6 +120,7 @@ def show_video(my_video_path, self_camera = False):
             break
     cap.release()
     cv2.destroyAllWindows()
+    draw_trail(action_trail, img_height, img_width)
 
 def show_video_from_http(url):
     stream = urllib.request.urlopen(url)
@@ -128,7 +151,10 @@ if __name__ == '__main__':
     video_path = 'jntm.mp4'
     print("Person Pose Model Device:", predictor_person_pose.device)
     prev_person_pose = None
+    action_trail = list()
+    img_height, img_width = (None, None)
     #print("Person Detection Model Device:", predictor_person_detection.model.device)
 
-    show_video(video_path, False)
+    #show_video(video_path, False)
+    show_video(video_path, True)
     #show_video_from_http(FLASK_URL)
