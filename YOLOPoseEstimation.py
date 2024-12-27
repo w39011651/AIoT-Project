@@ -71,7 +71,7 @@ def plot_track(img, keypoints, prev_keypoints, line_color = (0,0,255))->cv2.Mat:
             if i >= 5 and i <= 10:
                 curr_x, curr_y = list(map(int, curr_point[:2]))
                 prev_x, prev_y = list(map(int, prev_point[:2]))
-                if distance((curr_x, curr_y),(prev_x, prev_y)) > 10.0:
+                if distance((curr_x, curr_y),(prev_x, prev_y)) > HORIZON_MOVE_THRESHOULD:
                     continue
                 if i == 10:
                     action_trail.append((prev_x, prev_y))
@@ -153,6 +153,7 @@ if __name__ == '__main__':
     prev_person_pose = None
     action_trail = list()
     img_height, img_width = (None, None)
+    HORIZON_MOVE_THRESHOULD = 10.0
     #print("Person Detection Model Device:", predictor_person_detection.model.device)
 
     #show_video(video_path, False)
