@@ -3,9 +3,7 @@ import cv2
 import numpy as np
 from YOLOPoseutil import predictor_person_pose, predictor_person_detection
 import urllib
-
-
-_CONNECTIONS = ((2,4),(1,3),(10,8),(8,6),(6,5),(5,7),(7,9),(6,12),(12,14),(14,16),(5,11),(11,13),(13,15))
+from YOLOPoseConstant import _CONNECTIONS, shoulder_press_joint_index
 
 
 def get_video(video_path, read_from_camera = False):
@@ -48,19 +46,53 @@ def plot_keypoints(image, keypoints, line_color=(0,255,0), point_color=(255,0,0)
                 cv2.circle(image, (x,y), 5, point_color, -1)
     return image
 
-def show_video(my_video_path, self_camera = False):
-    cap = get_video(video_path=my_video_path, read_from_camera=self_camera)
+def plot_track(img, keypoints, prev_keypoints, line_color = (0,0,255))->cv2.Mat:
+    """
+    起始動作: 肩-肘與肘-腕角度為90度
+    上推: 不必完全打直、不鎖死(肩-肘-手接近一條直線)
+    下放: 手臂平行地面
+    穩定: 水平移動不可太多
 
+    函數功能: 劃出軌跡，對動作打分
+    """
+    if prev_keypoints is None:
+        return img
+    
+    for curr_data, prev_data in zip(keypoints.xy, prev_keypoints.xy):
+        if len(curr_data) == 0 or len(prev_data) == 0:
+            #print(f"len of curr_data:{len(curr_data)} and the len of prev_data:{len(prev_data)}")
+            continue
+        
+        for i, (curr_point, prev_point)  in enumerate(zip(curr_data, prev_data)):
+            if i >= 5 and i <= 10:
+                curr_x, curr_y = list(map(int, curr_point[:2]))
+                prev_x, prev_y = list(map(int, prev_point[:2]))
+                if curr_x > 0 and curr_y > 0 and prev_x > 0 and prev_y > 0:
+                    cv2.line(img, (prev_x, prev_y), (curr_x, curr_y), line_color, 2)    
+            
+    return img
+
+def show_video(my_video_path, self_camera = False):
+    global prev_person_pose
+    cap = get_video(video_path=my_video_path, read_from_camera=self_camera)
+    SKIP_FRAME_COUNTING = 500
+    skip_frame_counting = -1
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             print('Camera is not opened/video is not exist')
             break
         #img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        if skip_frame_counting % SKIP_FRAME_COUNTING != 0:
+            skip_frame_counting+=1
+            continue
         img = frame
         persons_pose = predictor_person_pose(img)[0]
         img = plot_keypoints(img, persons_pose.keypoints)
-        
+        if prev_person_pose is not None:
+            img = plot_track(img, persons_pose.keypoints, prev_person_pose.keypoints)
+        prev_person_pose = persons_pose
+        #判定動作品質
         cv2.imshow("img", img)
         if cv2.waitKey(2) & 0xFF == ord('q'):
             break
@@ -89,8 +121,14 @@ def show_video_from_http(url):
     cv2.destroyAllWindows()
 
 
+
+
 if __name__ == '__main__':
     FLASK_URL = 'http://192.168.1.134:5000'
     video_path = 'jntm.mp4'
-    #show_video(video_path, True)
-    show_video_from_http(FLASK_URL)
+    print("Person Pose Model Device:", predictor_person_pose.device)
+    prev_person_pose = None
+    #print("Person Detection Model Device:", predictor_person_detection.model.device)
+
+    show_video(video_path, False)
+    #show_video_from_http(FLASK_URL)
