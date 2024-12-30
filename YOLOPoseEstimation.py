@@ -100,7 +100,7 @@ def show_video(my_video_path, self_camera = False):
     global prev_person_pose, img_height, img_width, action_trail, shoulder_press_judger
 
     cap = get_video(video_path=my_video_path, read_from_camera=self_camera)
-    SKIP_FRAME_COUNTING = 500
+    SKIP_FRAME_COUNTING = 1000
     skip_frame_counting = -1
     while cap.isOpened():
         ret, frame = cap.read()
@@ -126,9 +126,17 @@ def show_video(my_video_path, self_camera = False):
             break
     cap.release()
     cv2.destroyAllWindows()
-    draw_trail(action_trail, img_height, img_width)
+    background = draw_trail(action_trail, img_height, img_width)
     if shoulder_press_judger.__current_state__ == state.start:
-        cv2.line()
+        cv2.line(background, 
+                 shoulder_press_judger.standard_track[0], 
+                 shoulder_press_judger.standard_track[1],
+                 (0,0,255), 2)
+    cv2.imshow("route", background)
+    if cv2.waitKey(0) & 0xFF == ord('q'):
+        cv2.destroyAllWindows()
+        cap.release()
+        return
 
 def show_video_from_http(url):
     stream = urllib.request.urlopen(url)
