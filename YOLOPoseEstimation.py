@@ -4,8 +4,8 @@ import numpy as np
 import math
 from YOLOPoseutil import predictor_person_pose, predictor_person_detection
 import urllib
-from YOLOPoseConstant import _CONNECTIONS, shoulder_press_joint_index
-
+from YOLOPoseConstant import _CONNECTIONS, shoulder_press_joint_index as sp_idx
+from YOLOPoseTracking import action_state, state
 
 def get_video(video_path, read_from_camera = False):
 
@@ -44,12 +44,14 @@ def plot_keypoints(image, keypoints, line_color=(0,255,0), point_color=(255,0,0)
         for idx, point in enumerate(data):#找出關節點、畫點
             x,y=list(map(int,point[:2]))
             if x > 0 and y > 0:
+                label = f'{idx}:({x},{y})'
                 cv2.circle(image, (x,y), 5, point_color, -1)
+                cv2.putText(image, label, (x,y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color=(0,0,255), thickness=2)
     return image
 
 def plot_track(img, keypoints, prev_keypoints, line_color = (0,0,255))->cv2.Mat:
     """
-    起始動作: 肩-肘與肘-腕角度為90度
+    起始動作: 肘低於肩且腕-肘角度垂直
     上推: 不必完全打直、不鎖死(肩-肘-手接近一條直線)
     下放: 手臂平行地面
     穩定: 水平移動不可太多
@@ -57,7 +59,7 @@ def plot_track(img, keypoints, prev_keypoints, line_color = (0,0,255))->cv2.Mat:
     函數功能: 劃出軌跡
     實現: 將所有移動過的點紀錄在list中, 在結束動作後畫出動作軌跡圖(可從暗到亮)
     """
-    global action_trail
+    global action_trail, shoulder_press_judger
 
     if prev_keypoints is None:
         return img
@@ -66,11 +68,16 @@ def plot_track(img, keypoints, prev_keypoints, line_color = (0,0,255))->cv2.Mat:
         if len(curr_data) == 0 or len(prev_data) == 0:
             #print(f"len of curr_data:{len(curr_data)} and the len of prev_data:{len(prev_data)}")
             continue
-        
+
+        shoulder_press_judger.begin(keypoints)
+        shoulder_press_judger.print_current_state()
+
         for i, (curr_point, prev_point)  in enumerate(zip(curr_data, prev_data)):
             if i >= 5 and i <= 10:
                 curr_x, curr_y = list(map(int, curr_point[:2]))
                 prev_x, prev_y = list(map(int, prev_point[:2]))
+                if curr_x <= 0 or curr_y <= 0 or prev_x <= 0 or prev_y <= 0:
+                    continue
                 if distance((curr_x, curr_y),(prev_x, prev_y)) > HORIZON_MOVE_THRESHOULD:
                     continue
                 if i == 10:
@@ -79,20 +86,18 @@ def plot_track(img, keypoints, prev_keypoints, line_color = (0,0,255))->cv2.Mat:
                     cv2.line(img, (prev_x, prev_y), (curr_x, curr_y), line_color, 2)    
     return img
 
-def draw_trail(trail:list, fixed_height, fixed_width):
+def draw_trail(trail:list, fixed_height, fixed_width)->cv2.Mat:
     back_ground = np.ones((fixed_height, fixed_width), dtype=np.uint8)*255
     trail_size = len(trail)
     for i in range(1, trail_size):
         cv2.line(back_ground, trail[i-1], trail[i], color=(0,0,255), thickness=2)
-    cv2.imshow('trail', back_ground)
-    if cv2.waitKey(0) & 0xFF == ord('q'):
-        cv2.destroyAllWindows()
+    return back_ground
 
 def distance(point1, point2)->float:
     return math.sqrt((point1[0]- point2[0])**2 + (point1[1] - point2[1])**2)
 
 def show_video(my_video_path, self_camera = False):
-    global prev_person_pose, img_height, img_width, action_trail
+    global prev_person_pose, img_height, img_width, action_trail, shoulder_press_judger
 
     cap = get_video(video_path=my_video_path, read_from_camera=self_camera)
     SKIP_FRAME_COUNTING = 500
@@ -109,11 +114,12 @@ def show_video(my_video_path, self_camera = False):
             skip_frame_counting+=1
             continue
         img = frame
-        persons_pose = predictor_person_pose(img)[0]
-        img = plot_keypoints(img, persons_pose.keypoints)
+        result = predictor_person_pose(img)
+        person_pose = result[0][0]#偵測人數n : person_pose = result[0][:n+1]
+        img = plot_keypoints(img, person_pose.keypoints)
         if prev_person_pose is not None:
-            img = plot_track(img, persons_pose.keypoints, prev_person_pose.keypoints)
-        prev_person_pose = persons_pose
+            img = plot_track(img, person_pose.keypoints, prev_person_pose.keypoints)
+        prev_person_pose = person_pose
         #判定動作品質
         cv2.imshow("img", img)
         if cv2.waitKey(2) & 0xFF == ord('q'):
@@ -121,6 +127,8 @@ def show_video(my_video_path, self_camera = False):
     cap.release()
     cv2.destroyAllWindows()
     draw_trail(action_trail, img_height, img_width)
+    if shoulder_press_judger.__current_state__ == state.start:
+        cv2.line()
 
 def show_video_from_http(url):
     stream = urllib.request.urlopen(url)
@@ -154,6 +162,7 @@ if __name__ == '__main__':
     action_trail = list()
     img_height, img_width = (None, None)
     HORIZON_MOVE_THRESHOULD = 10.0
+    shoulder_press_judger = action_state()
     #print("Person Detection Model Device:", predictor_person_detection.model.device)
 
     #show_video(video_path, False)
