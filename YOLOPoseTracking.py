@@ -4,6 +4,7 @@ import threading
 from YOLOPoseConstant import shoulder_press_joint_index as sp_idx
 import math
 import os
+import cv2
 
 class state(Enum):
     ready = 0
@@ -31,44 +32,31 @@ class action_state(object):
         self.standard_track = list()
 
     def begin(self, keypoints):
-        if not self.__time_counter__ is None:
-            print(f'Thread is alive?:{self.__time_counter__.is_alive()}')
-
-        if self.__current_state__ != state.ready:
-            return
         
+        if not self.__current_state__ is state.ready:
+            return
+
         is_shoulder_press = self.__is_shoulder_press__(keypoints)
         
-        if not self.__begin_flag__ or not self.__time_counter__.is_alive():
-            if is_shoulder_press:
-                self.__time_counter__ = threading.Thread(target=time.sleep, args=(2,))
-                self.__time_counter__.start()
-                self.__begin_flag__ = True
-                return
-            else:
-                return
-
-        if self.__time_counter__.is_alive():#如果為None，直接提前返回
-            return
         
-        if not self.__time_counter__.is_alive():
+        if is_shoulder_press:
+            print("nextstage")  
+            self.__next_state__()
 
-            if is_shoulder_press:
-                print("nextstage")  
-                self.__next_state__()
-
-                try:
-                    left_begin_xy = list(map(int,keypoints.xy[sp_idx.left_elbow.value][:2]))#將肘部關節轉換為整數列表
-                    left_end_xy = [left_begin_xy[0], left_begin_xy[1]+self.__ACTION_OFFSET__]
-                    right_begin_xy = list(map(int, keypoints.xy[sp_idx.right_elbow.value][:2]))
-                    right_end_xy = [right_begin_xy[0], right_begin_xy[1]+self.__ACTION_OFFSET__]
-                except IndexError:
-                    print("elbow is not is list")
-                    return
-
-                self.standard_track.append([left_begin_xy, left_end_xy], [right_begin_xy, right_end_xy])
-            else:
-                self.__begin_flag__ = False
+            try:
+                left_begin_xy = list(map(int,keypoints.xy[0][sp_idx.left_elbow.value][:2]))#將肘部關節轉換為整數列表
+                left_end_xy = [left_begin_xy[0], left_begin_xy[1]+self.__ACTION_OFFSET__]
+                right_begin_xy = list(map(int,keypoints.xy[0][sp_idx.right_elbow.value][:2]))
+                right_end_xy = [right_begin_xy[0], right_begin_xy[1]+self.__ACTION_OFFSET__]
+                self.standard_track.append((left_begin_xy, left_end_xy))
+                self.standard_track.append((right_begin_xy, right_end_xy))
+            except IndexError as e:
+                print(f'IndexError{e}')
+                print("elbow is not is list")
+                os.system("pause")
+                return
+        else:
+            self.__begin_flag__ = False
             
 
     def working(self):
@@ -118,7 +106,10 @@ class action_state(object):
             for _, point in enumerate(data):
                 pt_x, pt_y = list(map(int, point[:2]))
                 joint_list.append([pt_x, pt_y])#獲取所有關節xy座標
-       
+        
+        if not self.__key_joint_exists__(joint_list):
+            return False
+        
         print(self.__joint_angle__2(joint_list[sp_idx.right_elbow.value], joint_list[sp_idx.right_wrist.value], joint_list[sp_idx.right_shoulder.value]))
         print(self.__joint_angle__2(joint_list[sp_idx.left_elbow.value],joint_list[sp_idx.left_wrist.value], joint_list[sp_idx.left_shoulder.value]))
         # if (joint_list[sp_idx.left_elbow.value][1] > joint_list[sp_idx.left_shoulder.value][1] and 
@@ -147,8 +138,12 @@ class action_state(object):
         print(self.__current_state__.name)
         print(self.__state_changing_counter__)
                 
-
-
+    def __key_joint_exists__(self, in_list)->bool:
+        in_list = in_list[5:11]#所有關節(肩推)皆在畫面中
+        for l in in_list:
+            if l == [0,0]:
+                return False
+        return True
         
 
         
