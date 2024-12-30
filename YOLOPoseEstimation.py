@@ -127,11 +127,16 @@ def show_video(my_video_path, self_camera = False):
     cap.release()
     cv2.destroyAllWindows()
     background = draw_trail(action_trail, img_height, img_width)
+    background = cv2.cvtColor(background, cv2.COLOR_GRAY2RGB)
     if shoulder_press_judger.__current_state__ == state.start:
-        cv2.line(background, 
-                 (shoulder_press_judger.standard_track[0][0], shoulder_press_judger.standard_track[0][1]),
-                 (shoulder_press_judger.standard_track[1][1], shoulder_press_judger.standard_track[1][1]),
-                 (0,0,255), 2)
+        cv2.line(background,
+                 (shoulder_press_judger.standard_track[0][0]), #standard_track[0]為單隻手的起/終點 
+                 (shoulder_press_judger.standard_track[0][1]),
+                 (255,0,255), 2)
+        cv2.line(background,
+                 (shoulder_press_judger.standard_track[1][0]), #standard_track[0]為單隻手的起/終點 
+                 (shoulder_press_judger.standard_track[1][1]),
+                 (255,0,255), 2)
     cv2.imshow("route", background)
     if cv2.waitKey(0) & 0xFF == ord('q'):
         cv2.destroyAllWindows()

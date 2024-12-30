@@ -22,7 +22,7 @@ class action_state(object):
     standard_track = list()
     __time_counter__ = None#倒數1秒
     __state_changing_counter__ = 2
-    __ACTION_OFFSET__ = 50 # 動作高點(可能需可變?)
+    __ACTION_OFFSET__ = 250 # 動作高點(可能需可變?)
     __begin_flag__ = False#(Thread is not start yet)
 
     def __init__(self):
@@ -44,10 +44,10 @@ class action_state(object):
             self.__next_state__()
 
             try:
-                left_begin_xy = list(map(int,keypoints.xy[0][sp_idx.left_elbow.value][:2]))#將肘部關節轉換為整數列表
-                left_end_xy = [left_begin_xy[0], left_begin_xy[1]+self.__ACTION_OFFSET__]
-                right_begin_xy = list(map(int,keypoints.xy[0][sp_idx.right_elbow.value][:2]))
-                right_end_xy = [right_begin_xy[0], right_begin_xy[1]+self.__ACTION_OFFSET__]
+                left_begin_xy = list(map(int,keypoints.xy[0][sp_idx.left_wrist.value][:2]))#將肘部關節轉換為整數列表
+                left_end_xy = [left_begin_xy[0], max(left_begin_xy[1] - self.__ACTION_OFFSET__, 0)]
+                right_begin_xy = list(map(int,keypoints.xy[0][sp_idx.right_wrist.value][:2]))
+                right_end_xy = [right_begin_xy[0], max(right_begin_xy[1]-self.__ACTION_OFFSET__, 0)]
                 self.standard_track.append((left_begin_xy, left_end_xy))
                 self.standard_track.append((right_begin_xy, right_end_xy))
             except IndexError as e:
