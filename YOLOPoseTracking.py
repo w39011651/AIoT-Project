@@ -18,20 +18,34 @@ class state(Enum):
 class action_state(object):
     __current_state__ = state.ready
     repetition = 0
-    action_track = list()
+    action_track = list()#[[left_begin_xy, left_end_xy], [right_begin_xy, right_end_xy]]
     standard_track = list()
+    set_recorder = list()#[repetition]
     __time_counter__ = None#倒數1秒
     __state_changing_counter__ = 2
-    __ACTION_OFFSET__ = 250 # 動作高點(可能需可變?)
+    __ACTION_OFFSET__ = 100 # 動作高點(可能需可變?)
     __begin_flag__ = False#(Thread is not start yet)
+    __target_repetition__ = 5#from SQL
+    __target_rest_time__ = 10#休息時間#from SQL
+    __set_weight__ = 10#(from SQL)
 
     def __init__(self):
         self.__current_state__ = state.ready
         self.repetition = 0
         self.action_track = list()
         self.standard_track = list()
+    
+    def detect(self, keypoints):
+        if self.__current_state__ is state.ready:
+            self.__begin__(keypoints)
+        elif self.__current_state__ is state.start:
+            self.__concentric__(keypoints)
+        elif self.__current_state__ is state.action:
+            self.__eccentric__(keypoints)
+        elif self.__current_state__ is state.end:
+            self.__rest__()
 
-    def begin(self, keypoints):
+    def __begin__(self, keypoints):
         
         if not self.__current_state__ is state.ready:
             return
@@ -41,8 +55,9 @@ class action_state(object):
         
         if is_shoulder_press:
             print("nextstage")  
+            self.repetition = 0
             self.__next_state__()
-
+            
             try:
                 left_begin_xy = list(map(int,keypoints.xy[0][sp_idx.left_wrist.value][:2]))#將肘部關節轉換為整數列表
                 left_end_xy = [left_begin_xy[0], max(left_begin_xy[1] - self.__ACTION_OFFSET__, 0)]
@@ -59,18 +74,119 @@ class action_state(object):
             self.__begin_flag__ = False
             
 
-    def working(self):
+    def __concentric__(self, keypoints):
         """
         幫動作計數，條件:離心不可太快、行程完整
         上至兩倍前臂長，下至腕至耳朵
+        如果手腕不在肩膀,以上計時2秒後或完成目標次數next_state
+        如果夾角接近180度，count+1
+        左手track加入到action_track[0],右手track加入到action_track[1]
         """
+        if not self.__current_state__ is state.start:
+            return
+        
+        if not self.__is_working__(keypoints):#for 2 seconds
+            self.__next_state__()
+            self.set_recorder.append(self.repetition)
+            return
+        
+        try:
+            left_wrist = list(map(int,keypoints.xy[0][sp_idx.left_wrist.value][:2]))
+            right_wrist = list(map(int,keypoints.xy[0][sp_idx.right_wrist.value][:2]))
+            left_elbow = list(map(int,keypoints.xy[0][sp_idx.left_elbow.value][:2]))
+            right_elbow = list(map(int,keypoints.xy[0][sp_idx.right_elbow.value][:2]))
+            left_shoulder = list(map(int,keypoints.xy[0][sp_idx.left_shoulder.value][:2]))
+            right_shoulder = list(map(int,keypoints.xy[0][sp_idx.right_shoulder.value][:2]))
+        except IndexError as e:
+            print(f'IndexError{e}')
+            print("key joint is not is list")
+            os.system("pause")
+            return
+        
+        self.action_track.append([left_wrist, right_wrist])#全部動作的軌跡
 
-    def rest(self):
+
+        print(self.__joint_angle__2(left_elbow, left_wrist, left_shoulder))
+        print(self.__joint_angle__2(right_elbow, right_wrist, right_shoulder))
+        print(self.repetition)
+
+        if (self.__joint_angle__2(left_elbow, left_wrist, left_shoulder) > 130 and
+            self.__joint_angle__2(right_elbow, right_wrist, right_shoulder) > 130):
+            self.repetition += 1
+            self.__next_state__()
+        
+    def __eccentric__(self, keypoints):
         """
-        無法完成(黏滯過久)、完成目標次數
+        下放動作後回到concentric，才能再次計數
         """
+        if not self.__current_state__ is state.action:
+            return
+        
+        try:
+            left_wrist = list(map(int,keypoints.xy[0][sp_idx.left_wrist.value][:2]))
+            right_wrist = list(map(int,keypoints.xy[0][sp_idx.right_wrist.value][:2]))
+            left_elbow = list(map(int,keypoints.xy[0][sp_idx.left_elbow.value][:2]))
+            right_elbow = list(map(int,keypoints.xy[0][sp_idx.right_elbow.value][:2]))
+            left_shoulder = list(map(int,keypoints.xy[0][sp_idx.left_shoulder.value][:2]))
+            right_shoulder = list(map(int,keypoints.xy[0][sp_idx.right_shoulder.value][:2]))
+        except IndexError as e:
+            print(f'IndexError{e}')
+            print("key joint is not is list")
+            os.system("pause")
+            return
+
+        if (self.__joint_angle__2(left_elbow, left_wrist, left_shoulder) < 130 and
+            self.__joint_angle__2(right_elbow, right_wrist, right_shoulder) < 130):
+            if self.repetition < self.__target_repetition__:
+                self.__next_state__(False)
+            else:
+                self.__next_state__(True)
+        
 
 
+    def __rest__(self):
+        """
+        紀錄第幾組以及次數
+        休息時間計時
+        如果完成目標次數且低於預期秒數，則重量+2.5kg/5lbs
+        如果完成目標次數且高於預期秒數，則重量維持
+        如果未完成目標次數，則重量-2.5kg/5lbs，兩次以上直接結束該動作
+        目標組數完成結束動作，否則進入ready狀態
+        顯示: 第幾組、次數、休息時間、重量
+        """
+        if self.__current_state__ is not state.end or self.__time_counter__ is not None:
+            return
+        
+        if self.__time_counter__ is None:
+            self.__time_counter__ = threading.Thread(target=self.timer)
+            self.__time_counter__.start()
+
+    def timer(self):
+        rest_time = 0
+        while rest_time < self.__target_rest_time__:
+            time.sleep(1)
+            rest_time += 1
+            print(f"休息時間: {rest_time} 秒", end='\r')
+        self.__next_state__()
+        self.__time_counter__ = None
+
+
+    def __is_working__(self, keypoints)->bool:
+        joint_list = list()
+        for data in keypoints.xy:
+            
+            for _, point in enumerate(data):
+                pt_x, pt_y = list(map(int, point[:2]))
+                joint_list.append([pt_x, pt_y])#獲取所有關節xy座標
+        
+        if not self.__key_joint_exists__(joint_list):
+            return False
+        
+        if (joint_list[sp_idx.right_wrist.value][1] > joint_list[sp_idx.right_shoulder.value][1]
+            and joint_list[sp_idx.left_wrist.value][1] > joint_list[sp_idx.left_shoulder.value][1]):
+            return False
+        
+        return True
    
     
     def __joint_angle__2(self, elbow, wrist, shouler)->float:
@@ -112,22 +228,21 @@ class action_state(object):
         
         print(self.__joint_angle__2(joint_list[sp_idx.right_elbow.value], joint_list[sp_idx.right_wrist.value], joint_list[sp_idx.right_shoulder.value]))
         print(self.__joint_angle__2(joint_list[sp_idx.left_elbow.value],joint_list[sp_idx.left_wrist.value], joint_list[sp_idx.left_shoulder.value]))
-        # if (joint_list[sp_idx.left_elbow.value][1] > joint_list[sp_idx.left_shoulder.value][1] and 
-        #     joint_list[sp_idx.right_elbow.value][1] > joint_list[sp_idx.right_shoulder.value][1] and 
-        #     60 <= self.__joint_angle__2(joint_list[sp_idx.right_elbow.value],joint_list[sp_idx.right_wrist.value], joint_list[sp_idx.right_shoulder.value]) <= 90 and 
-        #     60 <= self.__joint_angle__2(joint_list[sp_idx.left_elbow.value],joint_list[sp_idx.left_wrist.value], joint_list[sp_idx.left_shoulder.value]) <= 90):
+        
         if (60 <= self.__joint_angle__2(joint_list[sp_idx.right_elbow.value],joint_list[sp_idx.right_wrist.value], joint_list[sp_idx.right_shoulder.value]) <= 120 and 
             60 <= self.__joint_angle__2(joint_list[sp_idx.left_elbow.value],joint_list[sp_idx.left_wrist.value], joint_list[sp_idx.left_shoulder.value]) <= 120):
                 return True#判斷肘部略低於肩部且腕肘角度接近垂直
         else:
             return False
     
-    def __next_state__(self)->int:
+    def __next_state__(self, finish=False)->int:
         if self.__current_state__.value == 0:
             self.__current_state__ = state.start
         elif self.__current_state__.value == 1:
             self.__current_state__ = state.action
-        elif self.__current_state__.value == 2:
+        elif self.__current_state__.value == 2 and not finish:
+            self.__current_state__ = state.start
+        elif self.__current_state__.value == 2 and finish:
             self.__current_state__ = state.end
         elif self.__current_state__.value == 3:
             self.__current_state__ = state.ready

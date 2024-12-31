@@ -59,7 +59,7 @@ def plot_track(img, keypoints, prev_keypoints, line_color = (0,0,255))->cv2.Mat:
     函數功能: 劃出軌跡
     實現: 將所有移動過的點紀錄在list中, 在結束動作後畫出動作軌跡圖(可從暗到亮)
     """
-    global action_trail, shoulder_press_judger
+    global shoulder_press_judger
 
     if prev_keypoints is None:
         return img
@@ -69,7 +69,7 @@ def plot_track(img, keypoints, prev_keypoints, line_color = (0,0,255))->cv2.Mat:
             #print(f"len of curr_data:{len(curr_data)} and the len of prev_data:{len(prev_data)}")
             continue
 
-        shoulder_press_judger.begin(keypoints)
+        shoulder_press_judger.detect(keypoints)
         shoulder_press_judger.print_current_state()
 
         for i, (curr_point, prev_point)  in enumerate(zip(curr_data, prev_data)):
@@ -80,28 +80,31 @@ def plot_track(img, keypoints, prev_keypoints, line_color = (0,0,255))->cv2.Mat:
                     continue
                 if distance((curr_x, curr_y),(prev_x, prev_y)) > HORIZON_MOVE_THRESHOULD:
                     continue
-                if i == 10:
-                    action_trail.append((prev_x, prev_y))
                 if curr_x > 0 and curr_y > 0 and prev_x > 0 and prev_y > 0:
                     cv2.line(img, (prev_x, prev_y), (curr_x, curr_y), line_color, 2)    
     return img
 
-def draw_trail(trail:list, fixed_height, fixed_width)->cv2.Mat:
+def draw_trail(fixed_height, fixed_width)->cv2.Mat:
+    global shoulder_press_judger
     back_ground = np.ones((fixed_height, fixed_width), dtype=np.uint8)*255
-    trail_size = len(trail)
-    for i in range(1, trail_size):
-        cv2.line(back_ground, trail[i-1], trail[i], color=(0,0,255), thickness=2)
+    for li in shoulder_press_judger.action_track:
+        left = li[0]
+        right = li[1]
+        cv2.line(back_ground, (left[0][0],left[0][1]), 
+                 (left[1][0],left[1][1]), color=(0,0,255), thickness=2)
+        cv2.line(back_ground, (right[0][0], right[0][1]), 
+                 (right[1][0], right[1][1]), color=(0,0,255), thickness=2)
     return back_ground
 
 def distance(point1, point2)->float:
     return math.sqrt((point1[0]- point2[0])**2 + (point1[1] - point2[1])**2)
 
 def show_video(my_video_path, self_camera = False):
-    global prev_person_pose, img_height, img_width, action_trail, shoulder_press_judger
+    global prev_person_pose, img_height, img_width, shoulder_press_judger
 
     cap = get_video(video_path=my_video_path, read_from_camera=self_camera)
-    SKIP_FRAME_COUNTING = 1000
-    skip_frame_counting = -1
+    SKIP_FRAME_COUNTING = 2
+    skip_frame_counting = 1
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
@@ -110,8 +113,8 @@ def show_video(my_video_path, self_camera = False):
         if img_height is None and img_width is None:
             img_height, img_width = frame.shape[:2]
         #img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        skip_frame_counting+=1
         if skip_frame_counting % SKIP_FRAME_COUNTING != 0:
-            skip_frame_counting+=1
             continue
         img = frame
         result = predictor_person_pose(img)
@@ -126,7 +129,7 @@ def show_video(my_video_path, self_camera = False):
             break
     cap.release()
     cv2.destroyAllWindows()
-    background = draw_trail(action_trail, img_height, img_width)
+    background = draw_trail(img_height, img_width)
     background = cv2.cvtColor(background, cv2.COLOR_GRAY2RGB)
     if shoulder_press_judger.__current_state__ == state.start:
         cv2.line(background,
@@ -172,7 +175,6 @@ if __name__ == '__main__':
     video_path = 'jntm.mp4'
     print("Person Pose Model Device:", predictor_person_pose.device)
     prev_person_pose = None
-    action_trail = list()
     img_height, img_width = (None, None)
     HORIZON_MOVE_THRESHOULD = 10.0
     shoulder_press_judger = action_state()
