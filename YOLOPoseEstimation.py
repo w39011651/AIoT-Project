@@ -86,18 +86,37 @@ def plot_track(img, keypoints, prev_keypoints, line_color = (0,0,255))->cv2.Mat:
 
 def draw_trail(fixed_height, fixed_width)->cv2.Mat:
     global shoulder_press_judger
+
     back_ground = np.ones((fixed_height, fixed_width), dtype=np.uint8)*255
-    for li in shoulder_press_judger.action_track:
-        left = li[0]
-        right = li[1]
-        cv2.line(back_ground, (left[0][0],left[0][1]), 
-                 (left[1][0],left[1][1]), color=(0,0,255), thickness=2)
-        cv2.line(back_ground, (right[0][0], right[0][1]), 
-                 (right[1][0], right[1][1]), color=(0,0,255), thickness=2)
+    back_ground = cv2.cvtColor(back_ground, cv2.COLOR_GRAY2RGB)
+
+    cv2.line(back_ground,
+                 (shoulder_press_judger.standard_track[0][0]), #standard_track[0]為單隻手的起/終點 
+                 (shoulder_press_judger.standard_track[0][1]),
+                 (255,0,255), 2)
+    cv2.line(back_ground,
+                 (shoulder_press_judger.standard_track[1][0]), #standard_track[0]為單隻手的起/終點 
+                 (shoulder_press_judger.standard_track[1][1]),
+                 (255,0,255), 2)
+    
+    size_of_track = len(shoulder_press_judger.action_track)
+    for i in range(1, size_of_track):
+        cv2.line(back_ground, shoulder_press_judger.action_track[i][0]
+                 , shoulder_press_judger.action_track[i-1][0], (0,0,0), 2)
+        cv2.line(back_ground, shoulder_press_judger.action_track[i][1]
+                 , shoulder_press_judger.action_track[i-1][1], (0,0,0), 2)
+        
     return back_ground
 
 def distance(point1, point2)->float:
     return math.sqrt((point1[0]- point2[0])**2 + (point1[1] - point2[1])**2)
+
+def perspective_transform(image, point)->cv2.Mat:
+    shift_x = image.shape[1]//2 - point[0]
+    p_matrix = np.float32([[1,0,shift_x],[0,1,0]])
+    image = cv2.warpAffine(image, p_matrix, (image.shape[1], image.shape[0]))
+    return image
+
 
 def show_video(my_video_path, self_camera = False):
     global prev_person_pose, img_height, img_width, shoulder_press_judger
@@ -119,6 +138,7 @@ def show_video(my_video_path, self_camera = False):
         img = frame
         result = predictor_person_pose(img)
         person_pose = result[0][0]#偵測人數n : person_pose = result[0][:n+1]
+        #透視變換要偵測2次，可能會影響效能
         img = plot_keypoints(img, person_pose.keypoints)
         if prev_person_pose is not None:
             img = plot_track(img, person_pose.keypoints, prev_person_pose.keypoints)
@@ -129,18 +149,10 @@ def show_video(my_video_path, self_camera = False):
             break
     cap.release()
     cv2.destroyAllWindows()
-    background = draw_trail(img_height, img_width)
-    background = cv2.cvtColor(background, cv2.COLOR_GRAY2RGB)
-    if shoulder_press_judger.__current_state__ == state.start:
-        cv2.line(background,
-                 (shoulder_press_judger.standard_track[0][0]), #standard_track[0]為單隻手的起/終點 
-                 (shoulder_press_judger.standard_track[0][1]),
-                 (255,0,255), 2)
-        cv2.line(background,
-                 (shoulder_press_judger.standard_track[1][0]), #standard_track[0]為單隻手的起/終點 
-                 (shoulder_press_judger.standard_track[1][1]),
-                 (255,0,255), 2)
-    cv2.imshow("route", background)
+    ret_background = draw_trail(img_height, img_width)
+    
+        
+    cv2.imshow("route", ret_background)
     if cv2.waitKey(0) & 0xFF == ord('q'):
         cv2.destroyAllWindows()
         cap.release()
@@ -172,7 +184,7 @@ def show_video_from_http(url):
 
 if __name__ == '__main__':
     FLASK_URL = 'http://192.168.1.134:5000'
-    video_path = 'jntm.mp4'
+    video_path = 'testData.mp4'
     print("Person Pose Model Device:", predictor_person_pose.device)
     prev_person_pose = None
     img_height, img_width = (None, None)
@@ -180,6 +192,6 @@ if __name__ == '__main__':
     shoulder_press_judger = action_state()
     #print("Person Detection Model Device:", predictor_person_detection.model.device)
 
-    #show_video(video_path, False)
-    show_video(video_path, True)
+    show_video(video_path, False)
+    #show_video(video_path, True)
     #show_video_from_http(FLASK_URL)

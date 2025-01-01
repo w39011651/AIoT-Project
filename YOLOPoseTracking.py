@@ -21,10 +21,15 @@ class action_state(object):
     action_track = list()#[[left_begin_xy, left_end_xy], [right_begin_xy, right_end_xy]]
     standard_track = list()
     set_recorder = list()#[repetition]
+    __prev_wrist_height__ = list()
     __time_counter__ = None#倒數1秒
     __state_changing_counter__ = 2
-    __ACTION_OFFSET__ = 100 # 動作高點(可能需可變?)
     __begin_flag__ = False#(Thread is not start yet)
+    __exhaustion_event__ = threading.Event()
+    
+    __ACTION_OFFSET__ = 100 # 動作高點(可能需可變?)
+    __exhaustion_threshold__ = 5
+    
     __target_repetition__ = 5#from SQL
     __target_rest_time__ = 10#休息時間#from SQL
     __set_weight__ = 10#(from SQL)
@@ -57,7 +62,8 @@ class action_state(object):
             print("nextstage")  
             self.repetition = 0
             self.__next_state__()
-            
+        
+        elif len(self.standard_track) == 0:#不重複加入
             try:
                 left_begin_xy = list(map(int,keypoints.xy[0][sp_idx.left_wrist.value][:2]))#將肘部關節轉換為整數列表
                 left_end_xy = [left_begin_xy[0], max(left_begin_xy[1] - self.__ACTION_OFFSET__, 0)]
@@ -103,8 +109,18 @@ class action_state(object):
             os.system("pause")
             return
         
+        if self.__time_counter__ is None:
+            self.__exhaustion_event__.clear()
+            self.__time_counter__ = threading.Thread(target=self.__exhaustion__, 
+                                                     args=([left_wrist, right_wrist],))
+            self.__time_counter__.start()
+
         self.action_track.append([left_wrist, right_wrist])#全部動作的軌跡
 
+        if self.__exhaustion_event__.is_set():
+            print("力竭，結束動作")
+            self.__next_state__(True)
+            self.set_recorder.append(self.repetition)
 
         print(self.__joint_angle__2(left_elbow, left_wrist, left_shoulder))
         print(self.__joint_angle__2(right_elbow, right_wrist, right_shoulder))
@@ -158,10 +174,22 @@ class action_state(object):
             return
         
         if self.__time_counter__ is None:
-            self.__time_counter__ = threading.Thread(target=self.timer)
+            self.__time_counter__ = threading.Thread(target=self.__timer__)
             self.__time_counter__.start()
 
-    def timer(self):
+    def __exhaustion__(self, wrist_height):
+        """判定是否力竭"""
+        start_time = time.time()
+        while time.time() - start_time < self.__exhaustion_threshold__:
+            left_wrist, right_wrist = wrist_height
+            if (abs(left_wrist[1] - self.__prev_wrist_height__[1][1]) >= 10 or 
+                abs(right_wrist[1] - self.__prev_wrist_height__[1][1]) >= 10):
+                return
+            time.sleep(0.1)
+            
+        self.__exhaustion_event__.set()
+
+    def __timer__(self):
         rest_time = 0
         while rest_time < self.__target_rest_time__:
             time.sleep(1)
@@ -238,8 +266,10 @@ class action_state(object):
     def __next_state__(self, finish=False)->int:
         if self.__current_state__.value == 0:
             self.__current_state__ = state.start
-        elif self.__current_state__.value == 1:
+        elif self.__current_state__.value == 1 and not finish:
             self.__current_state__ = state.action
+        elif self.__current_state__.value == 1 and finish:
+            self.__current_state__ = state.end
         elif self.__current_state__.value == 2 and not finish:
             self.__current_state__ = state.start
         elif self.__current_state__.value == 2 and finish:
