@@ -13,13 +13,17 @@ class state(Enum):
 
 class action_state(object):
     __current_state__ = state.ready
-    standrad_track = [] #標準軌跡
-    set_recorder = [] #紀錄每組的次數
-    time_counter = None #計時器
-    exhaustion_counter = threading.Event() #疲勞標誌
-    repetition = 0 #重複次數
-    target_repetition = 10 #目標重複次數
-    exhaustion_threshold = 5 #疲勞時間閾值
+    __standrad_track__ = [] #標準軌跡
+    __set_recorder__ = [] #紀錄每組的次數
+    __time_counter__ = None #計時器
+    __exhaustion_counter__ = threading.Event() #疲勞標誌
+    __repetition__ = 0 #重複次數
+    __target_repetition__ = 10 #目標重複次數
+    __target_rest_time__ = 60 #目標休息時間(from SQL)
+    __exhaustion_threshold__ = 5 #疲勞時間閾值
+    __target__group__ = 3 #目標組數
+    __current_group__ = 1 #當前組數
+    __fail_counter__ = 0 #失敗次數
 
     def detect(self, keypoints):
         if self.__current_state__ is state.ready:
@@ -42,17 +46,17 @@ class action_state(object):
         is_shoulder_press = self.__is_shoulder_press__(keypoints)
         
         if is_shoulder_press:
-            print("肩推開始")
+            print(f"第{self.__current_group__}肩推開始")
             self.repitition = 0
             self.__next_state__()
-        elif len(self.standrad_track) == 0: #不重複加入
+        elif len(self.__standrad_track__) == 0: #不重複加入
             try:
                 left_begin_xy = list(map(int,keypoints.xy[0][sp_idx.left_wrist.value][:2])) #將肘部關節轉換為整數列表
                 left_end_xy = [left_begin_xy[0], max(left_begin_xy[1] - self.__ACTION_OFFSET__, 0)]
                 right_begin_xy = list(map(int,keypoints.xy[0][sp_idx.right_wrist.value][:2]))
                 right_end_xy = [right_begin_xy[0], max(right_begin_xy[1]-self.__ACTION_OFFSET__, 0)]
-                self.standrad_track.append((left_begin_xy, left_end_xy))
-                self.standrad_track.append((right_begin_xy, right_end_xy))
+                self.__standrad_track__.append((left_begin_xy, left_end_xy))
+                self.__standrad_track__.append((right_begin_xy, right_end_xy))
             except IndexError as e:
                 print(f'IndexError{e}')
                 print("elbow is not is list")
@@ -73,7 +77,7 @@ class action_state(object):
         
         if not self.__is_working__(keypoints):
             self.__next_state__()
-            self.set_recorder.append(self.repitition)
+            self.__set_recorder__.append(self.repitition)
             return
         
         try:
@@ -92,11 +96,17 @@ class action_state(object):
         #印出夾角&次數
         print(self.__joint_angle__(left_elbow, left_wrist, left_shoulder))
         print(self.__joint_angle__(right_elbow, right_wrist, right_shoulder))
-        print(self.repetition)
+        print(self.__repetition__)
 
         if (self.__joint_angle__(left_elbow, left_wrist, left_shoulder) > 130 and 
             self.__joint_angle__(right_elbow, right_wrist, right_shoulder) > 130):
             self.repitition += 1
+            self.__next_state__()
+
+        is_exhaustion = self.__exhaustion__()
+        if is_exhaustion:
+            self.__next_state__(True)
+        else:
             self.__next_state__()
         
     def __action__(self, keypoints):
@@ -122,7 +132,7 @@ class action_state(object):
         
         if (self.__joint_angle__(left_elbow, left_wrist, left_shoulder) < 130 and
             self.__joint_angle__(right_elbow, right_wrist, right_shoulder) < 130):
-            if self.repitition < self.target_repetition:
+            if self.repitition < self.__target_repetition__:
                 self.__next_state__(False)
             else:
                 self.__next_state__(True)
@@ -137,19 +147,43 @@ class action_state(object):
         目標組數完成結束動作,否則進入ready狀態
         顯示: 第幾組、次數、休息時間、重量
         """
-        if self.__current_state__ is not state.end or self.time_counter is None: 
+        if self.__current_state__ is not state.end or self.__time_counter__ is not None: 
             return
         
-    
-    def __exhaustion__(self, wrist_height):
+        if self.__fail_counter__ >= 2:
+            print("動作失敗次數過多, 請重新開始")
+            return
+        
+        #休息時間計時
+        if self.__current_group__ < self.__target__group__:
+            self.__time_counter__ = threading.Thread(target=self.__timer__)
+            self.__time_counter__.start()
+        elif self.__current_group__ == self.__target__group__:
+            print(f"目標組數完成, Congratulation!")
+
+    def __exhaustion__(self, wrist_height) -> bool:
         """
         疲勞判斷
         """
+        current_time = time.time()
+        if time.time() - current_time >= self.__exhaustion_threshold__:
+            print("檢測到疲勞狀態！進入休息階段")
+            self.__fail_counter__ += 1
+            return True
+
     def __timer__(self):
         """
         計時器
         """
+        rest_time = 0
 
+        while rest_time < self.__target_rest_time__:
+            time.sleep(1)
+            rest_time += 1
+            print(f"第{self.__current_group__}組結束, 休息時間:{rest_time}秒")
+        self.__current_group__ += 1
+        self.__next_state__()
+        self.__time_counter__ = None
     
     def __is_working__(self, keypoints) -> bool:
         """
@@ -215,7 +249,7 @@ class action_state(object):
         """
         joint_list = []
 
-        # while data in keypoints.xy:
+        # for data in keypoints.xy:
         #     for point in enumerate(data):
         #         pt_x, pt_y = list(map(int, point[:2]))
         #         joint_list.append((pt_x, pt_y))
@@ -230,12 +264,12 @@ class action_state(object):
         else:
             return False
     
-    def print_current_state(self):
-        """
-        印出當前狀態
-        """
-        print(self.__current_state__.name)
-        print(self.__state_changing_counter__)
+    # def print_current_state(self):
+    #     """
+    #     印出當前狀態
+    #     """
+    #     print(self.__current_state__.name)
+    #     print(self.__state_changing_counter__)
         
     def __key_joint_exists__(self, in_list)->bool:
         """
