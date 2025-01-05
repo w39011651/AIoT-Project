@@ -24,6 +24,7 @@ class action_state(object):
     __target__group__ = 3 #目標組數
     __current_group__ = 1 #當前組數
     __fail_counter__ = 0 #失敗次數
+    __fail_flag__ = False #失敗標誌
 
     def detect(self, keypoints):
         if self.__current_state__ is state.ready:
@@ -72,6 +73,8 @@ class action_state(object):
         如果夾角接近180度,count+1
         左手track加入到action_track[0],右手track加入到action_track[1]
         """
+        self.__fail_flag__ = False
+
         if self.__current_state__ is not state.start:
             return
         
@@ -105,6 +108,7 @@ class action_state(object):
 
         is_exhaustion = self.__exhaustion__()
         if is_exhaustion:
+            self.__fail_flag__ = True
             self.__next_state__(True)
         else:
             self.__next_state__()
@@ -150,8 +154,11 @@ class action_state(object):
         if self.__current_state__ is not state.end or self.__time_counter__ is not None: 
             return
         
-        if self.__fail_counter__ >= 2:
-            print("動作失敗次數過多, 請重新開始")
+        if self.__fail_counter__ and not self.__fail_flag__:
+            print("動作失敗, 請重新開始")
+            return
+        if self.__fail_counter__ >= 2 and self.__fail_flag__:
+            print("連續動作失敗超過兩次，建議結束本次訓練！")
             return
         
         #休息時間計時
