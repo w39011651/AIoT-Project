@@ -69,7 +69,7 @@ def plot_track(img, keypoints, prev_keypoints, line_color = (0,0,255))->cv2.Mat:
             #print(f"len of curr_data:{len(curr_data)} and the len of prev_data:{len(prev_data)}")
             continue
 
-        shoulder_press_judger.detect(keypoints)
+        img = shoulder_press_judger.detect(keypoints)
         shoulder_press_judger.print_current_state()
 
         for i, (curr_point, prev_point)  in enumerate(zip(curr_data, prev_data)):

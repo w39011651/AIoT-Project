@@ -4,6 +4,7 @@ import os
 import threading
 import math
 import time
+import cv2
 
 class state(Enum):
     ready = 0
@@ -12,7 +13,7 @@ class state(Enum):
     end = 3
 
 class action_state(object):
-    __current_state__ = state.ready
+    __current_state__ = state.ready #當前狀態
     __standrad_track__ = [] #標準軌跡
     __set_recorder__ = [] #紀錄每組的次數
     __time_counter__ = None #計時器
@@ -25,8 +26,70 @@ class action_state(object):
     __current_group__ = 1 #當前組數
     __fail_counter__ = 0 #失敗次數
     __fail_flag__ = False #失敗標誌
+    __current_time__ = 0 #當前時間
+    
+    def render_text(self, image):
+        """
+        在圖像上渲染所有狀態相關的文字，位置固定：
+        - 當前狀態：左上角
+        - 組數和重複次數：右上角（休息時僅顯示組數）
+        - 疲勞警告：畫面下方中央
+        - 休息時間：畫面正中央
+        """
+        height, width = image.shape[:2] #取得圖像高度和寬度
+        
+        # 左上角 - 當前狀態
+        cv2.putText(image, f"State: {self.__current_state__.name}", 
+                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
+        
+        # 右上角 - 組數和重複次數
+        group_text = ""
+        #如果進入休息狀態，剔除重複次數並向右對齊
+        if self.__current_state__ is state.end:
+            group_text = f"Group: {self.__current_group__}/{self.__target__group__}"
+            (text_width, text_height), baseline = cv2.getTextSize(group_text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
+               
+        # 如果不在休息狀態，加入重複次數
+        if self.__current_state__ is not state.end and self.__repetition__ is not None:
+            group_text += f" Rep: {self.__repetition__}/{self.__target_repetition__}"
+        
+        # 計算右上角位置，留出10像素邊距
+        cv2.putText(image, group_text, 
+                    (width - text_width - 10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        
+        # 畫面下方中央 - 疲勞警告（類似字幕位置）
+        if self.__fail_flag__:
+            warning_text = "Warning: 檢測到疲勞狀態！進入休息階段"
+            (text_width, text_height), baseline = cv2.getTextSize(warning_text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)
+            # 計算中心位置
+            text_x = (width - text_width) // 2
+            text_y = int(height * 0.85)
+            cv2.putText(image, warning_text,
+                        (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+        
+        # 畫面正中央 - 休息時間
+        if self.__current_state__ is state.end and self.__time_counter__ is not None:
+            rest_text = f"Rest Time: {self.__target_rest_time__}s"
+            (text_width, text_height), baseline = cv2.getTextSize(rest_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
+            
+            text_x = (width - text_width) // 2
+            text_y = height // 2
+            
+            # # 半透明背景
+            # overlay = image.copy()
+            # cv2.rectangle(overlay, 
+            #             (text_x - 10, text_y - text_height - 10),
+            #             (text_x + text_width + 10, text_y + 10),
+            #             (0, 0, 0), -1)
+            # alpha = 0.6 #透明度
+            # image = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0) #混合圖像
+            
+            cv2.putText(image, rest_text,
+                        (text_x, text_y), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
+        return image
 
-    def detect(self, keypoints):
+    def detect(self, keypoints, image):
         if self.__current_state__ is state.ready:
             self.__ready__(keypoints) #開始動作
         elif self.__current_state__ is state.start:
@@ -35,6 +98,8 @@ class action_state(object):
             self.__action__(keypoints) #肩推進行中(向下)
         elif self.__current_state__ is state.end:
             self.__rest__() #休息時間
+        
+        return self.render_text(image)
 
     def __ready__(self, keypoints):
         """
@@ -47,7 +112,7 @@ class action_state(object):
         is_shoulder_press = self.__is_shoulder_press__(keypoints)
         
         if is_shoulder_press:
-            print(f"第{self.__current_group__}肩推開始")
+            # print(f"第{self.__current_group__}肩推開始")
             self.repitition = 0
             self.__next_state__()
         elif len(self.__standrad_track__) == 0: #不重複加入
@@ -74,7 +139,8 @@ class action_state(object):
         左手track加入到action_track[0],右手track加入到action_track[1]
         """
         self.__fail_flag__ = False
-
+        self.__current_time__ = time.time()
+        
         if self.__current_state__ is not state.start:
             return
         
@@ -136,7 +202,7 @@ class action_state(object):
         
         if (self.__joint_angle__(left_elbow, left_wrist, left_shoulder) < 130 and
             self.__joint_angle__(right_elbow, right_wrist, right_shoulder) < 130):
-            if self.repitition < self.__target_repetition__:
+            if self.__repetition__ < self.__target_repetition__:
                 self.__next_state__(False)
             else:
                 self.__next_state__(True)
@@ -151,6 +217,7 @@ class action_state(object):
         目標組數完成結束動作,否則進入ready狀態
         顯示: 第幾組、次數、休息時間、重量
         """
+        self.__repetition__ = None
         if self.__current_state__ is not state.end or self.__time_counter__ is not None: 
             return
         
@@ -172,8 +239,7 @@ class action_state(object):
         """
         疲勞判斷
         """
-        current_time = time.time()
-        if time.time() - current_time >= self.__exhaustion_threshold__:
+        if time.time() - self.__current_time__ >= self.__exhaustion_threshold__:
             print("檢測到疲勞狀態！進入休息階段")
             self.__fail_counter__ += 1
             return True
@@ -271,12 +337,12 @@ class action_state(object):
         else:
             return False
     
-    # def print_current_state(self):
-    #     """
-    #     印出當前狀態
-    #     """
-    #     print(self.__current_state__.name)
-    #     print(self.__state_changing_counter__)
+    def print_current_state(self):
+        """
+        印出當前狀態
+        """
+        print(self.__current_state__.name)
+        print(self.__state_changing_counter__)
         
     def __key_joint_exists__(self, in_list)->bool:
         """
