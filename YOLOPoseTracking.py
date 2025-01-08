@@ -109,18 +109,10 @@ class action_state(object):
             os.system("pause")
             return
         
-        if self.__time_counter__ is None:
-            self.__exhaustion_event__.clear()
-            self.__time_counter__ = threading.Thread(target=self.__exhaustion__, 
-                                                     args=([left_wrist, right_wrist],))
-            self.__time_counter__.start()
 
         self.action_track.append([left_wrist, right_wrist])#全部動作的軌跡
 
-        if self.__exhaustion_event__.is_set():
-            print("力竭，結束動作")
-            self.__next_state__(True)
-            self.set_recorder.append(self.repetition)
+
 
         print(self.__joint_angle__2(left_elbow, left_wrist, left_shoulder))
         print(self.__joint_angle__2(right_elbow, right_wrist, right_shoulder))
@@ -176,18 +168,6 @@ class action_state(object):
         if self.__time_counter__ is None:
             self.__time_counter__ = threading.Thread(target=self.__timer__)
             self.__time_counter__.start()
-
-    def __exhaustion__(self, wrist_height):
-        """判定是否力竭"""
-        start_time = time.time()
-        while time.time() - start_time < self.__exhaustion_threshold__:
-            left_wrist, right_wrist = wrist_height
-            if (abs(left_wrist[1] - self.__prev_wrist_height__[1][1]) >= 10 or 
-                abs(right_wrist[1] - self.__prev_wrist_height__[1][1]) >= 10):
-                return
-            time.sleep(0.1)
-            
-        self.__exhaustion_event__.set()
 
     def __timer__(self):
         rest_time = 0
