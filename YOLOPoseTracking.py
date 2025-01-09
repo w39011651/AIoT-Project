@@ -271,6 +271,10 @@ class action_state(object):
         return True
     
     def __fetch_data_from_db__(self):
+        """
+        database structure:
+        id----date----weight----repetition----rest_time----score
+        """
         pass
 
     def __update_data_to_db__(self):
