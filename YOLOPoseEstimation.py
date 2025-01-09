@@ -183,7 +183,7 @@ def show_video_from_http(url):
 
 
 if __name__ == '__main__':
-    FLASK_URL = 'http://192.168.1.134:5000'
+    FLASK_URL = 'http://172.20.10.10:5000'
     video_path = 'testData.mp4'
     print("Person Pose Model Device:", predictor_person_pose.device)
     prev_person_pose = None
@@ -192,6 +192,6 @@ if __name__ == '__main__':
     shoulder_press_judger = action_state()
     #print("Person Detection Model Device:", predictor_person_detection.model.device)
 
-    show_video(video_path, False)
+    #show_video(video_path, False)
     #show_video(video_path, True)
-    #show_video_from_http(FLASK_URL)
+    show_video_from_http(FLASK_URL)

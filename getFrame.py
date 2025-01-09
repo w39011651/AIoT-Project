@@ -5,34 +5,42 @@ import cv2
 import urllib.request
 
 #可能要在不同台電腦上跑才能獲取影像
-INTERVAL_TIME = 2
-url = 'http://127.0.0.1:5000'
 
+class getFrame:
+    INTERVAL_TIME = 10
+    url = 'http://172.20.10.10:5000'
+    def __init__(self):
+        pass
 
-def fetch_mjpeg_stream(url):
-    stream = urllib.request.urlopen(url)
-    byte_data = b''
-    while True:
-        data = stream.read(1024)
-        if not data:
-            break
+    def set_url(self, url):
+        self.url = url
 
-        if type(data) != type(byte_data):
-            continue
-
-        byte_data += data
-        start_index = byte_data.find(b'\xff\xd8')
-        end_index = byte_data.find(b'\xff\xd9')
-
-        if start_index != -1 and end_index != -1 and start_index < end_index:
-            jpg_data = byte_data[start_index:end_index+2]
-            byte_data = byte_data[end_index+2]
-            np_array = np.frombuffer(jpg_data, dtype=np.uint8)
-            img = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
-            cv2.imshow("img", img)
-
-            if cv2.waitKey(INTERVAL_TIME) & 0xFF == 'q':
+    def fetch_mjpeg_stream(self, url)->cv2.Mat:
+        stream = urllib.request.urlopen(url)
+        byte_data = b''
+        while True:
+            data = stream.read(1024)
+            if not data:
                 break
 
-fetch_mjpeg_stream(url)
+            if type(data) != type(byte_data):
+                continue
+
+            byte_data += data
+            start_index = byte_data.find(b'\xff\xd8')
+            end_index = byte_data.find(b'\xff\xd9')
+
+            if start_index != -1 and end_index != -1:
+                jpg_data = byte_data[start_index:end_index+2]
+                byte_data = byte_data[end_index+2:]
+                np_array = np.frombuffer(jpg_data, dtype=np.uint8)
+                img = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
+                # cv2.imshow('frame', img)
+                # if cv2.waitKey(self.INTERVAL_TIME) & 0xFF == ord('q'):
+                #     break
+                return img
+            else:
+                print("Cannot find image data")
+                #raise Exception("Cannot find image data")
+                return None
 

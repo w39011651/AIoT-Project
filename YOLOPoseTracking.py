@@ -269,6 +269,12 @@ class action_state(object):
             if l == [0,0]:
                 return False
         return True
+    
+    def __fetch_data_from_db__(self):
+        pass
+
+    def __update_data_to_db__(self):
+        pass
         
 
         
