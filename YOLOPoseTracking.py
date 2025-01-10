@@ -67,13 +67,18 @@ class action_state(object):
                         (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
         
         # 畫面正中央 - 休息時間
+<<<<<<< HEAD
         if self.__current_state__ is state.end:
+=======
+        if self.__current_state__ is state.end and self.__time_counter__ is not None:
+>>>>>>> f76a0559b7e01b601bb3a4564dbee64c703518b4
             if self.__current_group__ <= self.__target__group__:
                 rest_text = f"Rest Time: {self.__target_rest_time__}s"
                 (text_width, text_height), baseline = cv2.getTextSize(rest_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
                 
                 text_x = (width - text_width) // 2
                 text_y = height // 2
+<<<<<<< HEAD
             elif self.__current_group__ == self.__target__group__:
                 rest_text = "目標組數完成, Congratulation!"
                 (text_width, text_height), baseline = cv2.getTextSize(rest_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
@@ -93,6 +98,31 @@ class action_state(object):
             cv2.putText(image, rest_text,
                         (text_x, text_y), 
                         cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
+=======
+                
+                # # 半透明背景
+                # overlay = image.copy()
+                # cv2.rectangle(overlay, 
+                #             (text_x - 10, text_y - text_height - 10),
+                #             (text_x + text_width + 10, text_y + 10),
+                #             (0, 0, 0), -1)
+                # alpha = 0.6 #透明度
+                # image = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0) #混合圖像
+                
+                cv2.putText(image, rest_text,
+                            (text_x, text_y), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
+            else:
+                rest_text = "目標組數完成, Congratulation!"
+                (text_width, text_height), baseline = cv2.getTextSize(rest_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
+                
+                text_x = (width - text_width) // 2
+                text_y = height // 2
+                
+                cv2.putText(image, rest_text,
+                            (text_x, text_y), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
+>>>>>>> f76a0559b7e01b601bb3a4564dbee64c703518b4
         return image
 
     def detect(self, keypoints, image):
