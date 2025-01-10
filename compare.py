@@ -17,7 +17,7 @@ def get_video(video_path, read_from_camera = False):
     
 def plot_bbox(image, detection_result, color = (0,0,255)):
     for i, bbox in enumerate(detection_result):
-        x1,y1,x2,y2=list(map(int, bbox))
+        x1,y1,x2,y2 = list(map(int, bbox))
         conf = detection_result.boxes.conf[i]
         cls = detection_result.boxes.cls[i]
         label = f'{detection_result[int(cls[i])]}{float(conf):.2f}'
@@ -69,7 +69,7 @@ def plot_track(img, keypoints, prev_keypoints, line_color = (0,0,255))->cv2.Mat:
             #print(f"len of curr_data:{len(curr_data)} and the len of prev_data:{len(prev_data)}")
             continue
 
-        img = shoulder_press_judger.detect(keypoints, img)
+        img = shoulder_press_judger.detect(keypoints)
         shoulder_press_judger.print_current_state()
 
         for i, (curr_point, prev_point)  in enumerate(zip(curr_data, prev_data)):
@@ -88,18 +88,17 @@ def draw_trail(fixed_height, fixed_width)->cv2.Mat:
     global shoulder_press_judger
 
     back_ground = np.ones((fixed_height, fixed_width), dtype=np.uint8)*255
-    back_ground = cv2.cvtColor(back_ground, cv2.COLOR_GRAY2BGR)
+    back_ground = cv2.cvtColor(back_ground, cv2.COLOR_GRAY2RGB)
 
     cv2.line(back_ground,
                  (shoulder_press_judger.standard_track[0][0]), #standard_track[0]為單隻手的起/終點 
                  (shoulder_press_judger.standard_track[0][1]),
-                 (0,0,255), 2)
-    print("draw left standard track")
+                 (255,0,255), 2)
     cv2.line(back_ground,
                  (shoulder_press_judger.standard_track[1][0]), #standard_track[0]為單隻手的起/終點 
                  (shoulder_press_judger.standard_track[1][1]),
-                 (0,0,255), 2)
-    print("draw right standard track")
+                 (255,0,255), 2)
+    
     size_of_track = len(shoulder_press_judger.action_track)
     for i in range(1, size_of_track):
         cv2.line(back_ground, shoulder_press_judger.action_track[i][0]
@@ -133,27 +132,25 @@ def show_video(my_video_path, self_camera = False):
         if img_height is None and img_width is None:
             img_height, img_width = frame.shape[:2]
         #img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        skip_frame_counting += 1
+        skip_frame_counting+=1
         if skip_frame_counting % SKIP_FRAME_COUNTING != 0:
             continue
         img = frame
         result = predictor_person_pose(img)
-        person_pose = result[0][0] #偵測人數n : person_pose = result[0][:n+1]
+        person_pose = result[0][0]#偵測人數n : person_pose = result[0][:n+1]
         #透視變換要偵測2次，可能會影響效能
         img = plot_keypoints(img, person_pose.keypoints)
         if prev_person_pose is not None:
             img = plot_track(img, person_pose.keypoints, prev_person_pose.keypoints)
         prev_person_pose = person_pose
         #判定動作品質
-        if img is not None and img.size > 0:
-            cv2.imshow("img", img)
-            if cv2.waitKey(2) & 0xFF == ord('q'):
-                break
+        cv2.imshow("img", img)
+        if cv2.waitKey(2) & 0xFF == ord('q'):
+            break
     cap.release()
     cv2.destroyAllWindows()
     ret_background = draw_trail(img_height, img_width)
     
-        
     cv2.imshow("route", ret_background)
     if cv2.waitKey(0) & 0xFF == ord('q'):
         cv2.destroyAllWindows()
@@ -182,7 +179,7 @@ def show_video_from_http(url):
     cv2.destroyAllWindows()
 
 if __name__ == '__main__':
-    FLASK_URL = 'http://172.20.10.10:5000'
+    FLASK_URL = 'http://192.168.1.134:5000'
     video_path = 'testData.mp4'
     print("Person Pose Model Device:", predictor_person_pose.device)
     prev_person_pose = None
@@ -190,8 +187,7 @@ if __name__ == '__main__':
     HORIZON_MOVE_THRESHOULD = 10.0
     shoulder_press_judger = action_state()
     #print("Person Detection Model Device:", predictor_person_detection.model.device)
-    shoulder_press_judger.test_method()
-    #exit()
-    #show_video(video_path, False)
-    show_video(video_path, True)
+
+    show_video(video_path, False)
+    #show_video(video_path, True)
     #show_video_from_http(FLASK_URL)
