@@ -192,7 +192,8 @@ if __name__ == '__main__':
     HORIZON_MOVE_THRESHOULD = 10.0
     shoulder_press_judger = action_state()
     #print("Person Detection Model Device:", predictor_person_detection.model.device)
-
+    shoulder_press_judger.test_method()
+    exit()
     show_video(video_path, False)
     #show_video(video_path, True)
     #show_video_from_http(FLASK_URL)

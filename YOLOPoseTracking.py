@@ -33,15 +33,21 @@ class action_state(object):
     __MOVE_THRESHOLD__ = 100 #超過此值視為偵測錯誤
     
     __db_connection__ = None
-    #動作列表 __target_action_list__ #from SQL
     __set_indicator__ = 0#第幾組
+    __target_set_count__ = 0#目標組數
     __target_repetition__ = []#from SQL
     __target_rest_time__ = []#休息時間#from SQL
     __target_weight__ = []#(from SQL)
+    __score_record__ = []#紀錄每次動作的分數
     #長度代表組數
 
     def test_method(self):
-        self.__fetch_data_from_db__()
+        self.__target_set_count__ = 3
+        self.__target_repetition__ = [15, 15, 15]
+        self.__target_rest_time__ = [90, 90, 90]
+        self.__target_weight__ = [10, 10, 10]
+        self.__score_record__ = [80, 80, 80]
+        self.insert_data_to_db()
 
     def __init__(self):
         self.__current_state__ = state.ready
@@ -203,6 +209,7 @@ class action_state(object):
             return
         
         if self.__time_counter__ is None:
+            self.__set_indicator__ += 1
             self.__time_counter__ = threading.Thread(target=self.__timer__)
             self.__time_counter__.start()
 
@@ -328,7 +335,7 @@ class action_state(object):
             total_distance = total_distance + distance1 + distance2
             #分數: score = 100 - coefficient\times\sum_{i=1}^{n} distance
         self.action_track.clear()
-        return 100 - 0.5*total_distance
+        return 0.5*total_distance
 
     def __two_point_distance__(self, pt1, pt2)->float:
         return math.sqrt(pow(pt1[0]-pt2[0],2)+pow(pt1[1]-pt2[1],2))
@@ -417,13 +424,23 @@ class action_state(object):
             else:
                 action_target.append(180)
 
-        for _ in range(0, action_target[2]):
+        self.__target_set_count__ = action_target[2]
+        for _ in range(0, self.__target_set_count__):
             self.__target_weight__.append(action_target[0])
             self.__target_repetition__.append(action_target[1])
-            self.__target_rest_time__.append(action_target[3])       
+            self.__target_rest_time__.append(action_target[3])      
 
     def insert_data_to_db(self):
-        pass
+        with self.__db_connection__ as conn:
+            conn.reconnect()
+            cursor=conn.cursor()
+            sql = "INSERT INTO workout_data (workout_date, weight, repetition, rest_time, score) VALUES (%s, %s, %s, %s, %s)"
+            
+            for i in range(self.__target_set_count__):
+                rest_time_str = f"00:{self.__target_rest_time__[i]//60}:{self.__target_rest_time__[i]%60}"
+                cursor.execute(sql, (time.strftime("%Y-%m-%d"), self.__target_weight__[i], self.__target_repetition__[i], rest_time_str, self.__score_record__[i]))
+                conn.commit()
+            cursor.close()
         
 
         
