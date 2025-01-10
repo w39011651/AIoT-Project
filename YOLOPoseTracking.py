@@ -66,10 +66,19 @@ class action_state(object):
         
         elif len(self.standard_track) == 0:#不重複加入
             try:
+                #手肘可能不會被偵測到而變為[0,0]
+                SLOPE = 3.7320508075688#斜率=tan60^o
                 left_begin_xy = list(map(int,keypoints.xy[0][sp_idx.left_wrist.value][:2]))#將肘部關節轉換為整數列表
-                left_end_xy = [left_begin_xy[0], max(left_begin_xy[1] - self.__ACTION_OFFSET__, 0)]
                 right_begin_xy = list(map(int,keypoints.xy[0][sp_idx.right_wrist.value][:2]))
-                right_end_xy = [right_begin_xy[0], max(right_begin_xy[1]-self.__ACTION_OFFSET__, 0)]
+
+                if left_begin_xy == [0,0] or right_begin_xy == [0,0]:
+                    return
+
+                #left_end_xy = [left_begin_xy[0], 0]#更改為到最上面(因為只看橫移)
+                left_end_xy = [int(left_begin_xy[0] - left_begin_xy[1]//SLOPE), 0]
+                #right_end_xy = [right_begin_xy[0], 0]
+                right_end_xy = [int(right_begin_xy[0] + right_begin_xy[1]//SLOPE), 0]
+
                 self.standard_track.append((left_begin_xy, left_end_xy))
                 self.standard_track.append((right_begin_xy, right_end_xy))
             except IndexError as e:
@@ -302,13 +311,17 @@ class action_state(object):
         coefficient_a2 = self.standard_track[1][0][1]-self.standard_track[1][1][1]
         coefficient_b2 = self.standard_track[1][1][0]-self.standard_track[1][0][0]
         coefficient_c2 = coefficient_a2*self.standard_track[1][0][0]+coefficient_b2*self.standard_track[1][0][1]
-
+        total_distance = 0
         #forall point in action track, calculate the distance to the line
         for list in self.action_track:
             left_pt = list[0]
             right_pt = list[1]
             distance1 = abs(coefficient_a1*left_pt[0]+coefficient_b1*left_pt[1]-coefficient_c1)/math.sqrt(pow(coefficient_a1,2)+pow(coefficient_b1,2))
             distance2 = abs(coefficient_a2*right_pt[0]+coefficient_b2*right_pt[1]-coefficient_c2)/math.sqrt(pow(coefficient_a2,2)+pow(coefficient_b2,2))
+            total_distance = total_distance + distance1 + distance2
+            #分數: score = 100 - coefficient\times\sum_{i=1}^{n} distance
+        self.action_track.clear()
+        return 100 - 0.5*total_distance
 
     def __two_point_distance__(self, pt1, pt2)->float:
         return math.sqrt(pow(pt1[0]-pt2[0],2)+pow(pt1[1]-pt2[1],2))
