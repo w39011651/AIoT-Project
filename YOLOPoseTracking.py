@@ -27,6 +27,7 @@ class action_state(object):
     __fail_counter__ = 0 #失敗次數
     __fail_flag__ = False #失敗標誌
     __current_time__ = 0 #當前時間
+    __ACTION_OFFSET__ = 100 #動作高點
     
     def render_text(self, image):
         """
@@ -46,7 +47,7 @@ class action_state(object):
         group_text = ""
         #如果進入休息狀態，剔除重複次數並向右對齊
         if self.__current_state__ is state.end:
-            group_text = f"Group: {self.__current_group__}/{self.__target__group__}"
+            group_text = f"組數: {self.__current_group__}/{self.__target__group__}"
             (text_width, text_height), baseline = cv2.getTextSize(group_text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
                
         # 如果不在休息狀態，加入重複次數
@@ -69,12 +70,16 @@ class action_state(object):
         
         # 畫面正中央 - 休息時間
         if self.__current_state__ is state.end and self.__time_counter__ is not None:
-            rest_text = f"Rest Time: {self.__target_rest_time__}s"
-            (text_width, text_height), baseline = cv2.getTextSize(rest_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
-            
-            text_x = (width - text_width) // 2
-            text_y = height // 2
-            
+            if self.__current_group__ <= self.__target__group__:
+                rest_text = f"Rest Time: {self.__target_rest_time__}s"
+                (text_width, text_height), baseline = cv2.getTextSize(rest_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
+                
+                text_x = (width - text_width) // 2
+                text_y = height // 2
+            else:
+                rest_text = "目標組數完成, Congratulation!"
+                (text_width, text_height), baseline = cv2.getTextSize(rest_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
+                
             # # 半透明背景
             # overlay = image.copy()
             # cv2.rectangle(overlay, 
@@ -84,12 +89,18 @@ class action_state(object):
             # alpha = 0.6 #透明度
             # image = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0) #混合圖像
             
+            text_x = (width - text_width) // 2
+            text_y = height // 2
+            
             cv2.putText(image, rest_text,
                         (text_x, text_y), 
                         cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
         return image
 
     def detect(self, keypoints, image):
+        """
+        肩推動作流程檢測
+        """
         if self.__current_state__ is state.ready:
             self.__ready__(keypoints) #開始動作
         elif self.__current_state__ is state.start:
@@ -315,7 +326,6 @@ class action_state(object):
         else:
             self.__current_state__ = state.start
 
-        
     def __is_shoulder_press__(self, keypoints) -> bool:
         """
         判斷肩推準備動作

@@ -17,7 +17,7 @@ def get_video(video_path, read_from_camera = False):
     
 def plot_bbox(image, detection_result, color = (0,0,255)):
     for i, bbox in enumerate(detection_result):
-        x1,y1,x2,y2=list(map(int, bbox))
+        x1,y1,x2,y2 = list(map(int, bbox))
         conf = detection_result.boxes.conf[i]
         cls = detection_result.boxes.cls[i]
         label = f'{detection_result[int(cls[i])]}{float(conf):.2f}'
@@ -151,7 +151,6 @@ def show_video(my_video_path, self_camera = False):
     cv2.destroyAllWindows()
     ret_background = draw_trail(img_height, img_width)
     
-        
     cv2.imshow("route", ret_background)
     if cv2.waitKey(0) & 0xFF == ord('q'):
         cv2.destroyAllWindows()
@@ -178,9 +177,6 @@ def show_video_from_http(url):
             if cv2.waitKey(2) & 0xFF == ord('q'):
                 break
     cv2.destroyAllWindows()
-
-
-
 
 if __name__ == '__main__':
     FLASK_URL = 'http://192.168.1.134:5000'
