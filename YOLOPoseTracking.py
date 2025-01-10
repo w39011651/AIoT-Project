@@ -45,38 +45,36 @@ class action_state(object):
         
         # 右上角 - 組數和重複次數
         group_text = ""
-        #如果進入休息狀態，剔除重複次數並向右對齊
-        if self.__current_state__ is state.end:
-            group_text = f"組數: {self.__current_group__}/{self.__target__group__}"
+        
+        if self.__current_state__ is state.end: #如果進入休息狀態，剔除重複次數並向右對齊
+            group_text = f"Group: {self.__current_group__}/{self.__target__group__}"
             (text_width, text_height), baseline = cv2.getTextSize(group_text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
                
-        # 如果不在休息狀態，加入重複次數
-        if self.__current_state__ is not state.end and self.__repetition__ is not None:
+        if self.__current_state__ is not state.end and self.__repetition__ is not None: #如果不在休息狀態，加入重複次數
             group_text += f" Rep: {self.__repetition__}/{self.__target_repetition__}"
         
-        # 計算右上角位置，留出10像素邊距
         cv2.putText(image, group_text, 
                     (width - text_width - 10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         
         # 畫面下方中央 - 疲勞警告（類似字幕位置）
-        if self.__fail_flag__:
+        if self.__fail_flag__ and self.__current_state__ is state.action:
             warning_text = "Warning: 檢測到疲勞狀態！進入休息階段"
             (text_width, text_height), baseline = cv2.getTextSize(warning_text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)
-            # 計算中心位置
+
             text_x = (width - text_width) // 2
             text_y = int(height * 0.85)
             cv2.putText(image, warning_text,
                         (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
         
         # 畫面正中央 - 休息時間
-        if self.__current_state__ is state.end and self.__time_counter__ is not None:
+        if self.__current_state__ is state.end:
             if self.__current_group__ <= self.__target__group__:
                 rest_text = f"Rest Time: {self.__target_rest_time__}s"
                 (text_width, text_height), baseline = cv2.getTextSize(rest_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
                 
                 text_x = (width - text_width) // 2
                 text_y = height // 2
-            else:
+            elif self.__current_group__ == self.__target__group__:
                 rest_text = "目標組數完成, Congratulation!"
                 (text_width, text_height), baseline = cv2.getTextSize(rest_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
                 
