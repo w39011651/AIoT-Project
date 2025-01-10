@@ -5,6 +5,7 @@ from YOLOPoseConstant import shoulder_press_joint_index as sp_idx
 import math
 import os
 import cv2
+import mysql.connector
 
 class state(Enum):
     ready = 0
@@ -31,15 +32,21 @@ class action_state(object):
     __exhaustion_threshold__ = 5
     __MOVE_THRESHOLD__ = 100 #超過此值視為偵測錯誤
     
+    __db_connection__ = None
+    #動作列表 __target_action_list__ #from SQL
     __target_repetition__ = 5#from SQL
     __target_rest_time__ = 10#休息時間#from SQL
     __set_weight__ = 10#(from SQL)
+
+    def test_method(self):
+        self.__fetch_data_from_db__()
 
     def __init__(self):
         self.__current_state__ = state.ready
         self.repetition = 0
         self.action_track = list()
         self.standard_track = list()
+        self.__db_connection__ = self.__connect_to_db__()
     
     def detect(self, keypoints):
         if self.__current_state__ is state.ready:
@@ -299,9 +306,6 @@ class action_state(object):
 
     def __calculate_score__(self) -> float:
         """
-        計算分數，分數=次數*重量
-        """
-        """
         兩條直線，對所有action track算出到直線距離，並打分
         """
         coefficient_a1 = self.standard_track[0][0][1]-self.standard_track[0][1][1] #y1-y2 = the coefficient of the x
@@ -326,14 +330,46 @@ class action_state(object):
     def __two_point_distance__(self, pt1, pt2)->float:
         return math.sqrt(pow(pt1[0]-pt2[0],2)+pow(pt1[1]-pt2[1],2))
     
+    def __connect_to_db__(self):
+        connection = mysql.connector.connect(
+        host="database-1.c7862uku0eq4.ap-northeast-1.rds.amazonaws.com",
+        user="admin",
+        password="33818236",
+        database="demo_database"
+        )
+        return connection
+    
     def __fetch_data_from_db__(self):
         """
         database structure:
-        id----date----weight----repetition----rest_time----score
+        id----workout_date----weight----repetition----rest_time----score
         """
-        pass
+        with self.__db_connection__ as conn:
+            cursor=conn.cursor(dictionary=True, buffered=True)
+            cursor.execute("SELECT * FROM workout_data")
+            last_action = cursor.fetchone()#找到最後一筆資料
+            cursor.reset()
+            if last_action:
+                last_date = last_action['workout_date']
+                query = "SELECT * FROM workout_data WHERE workout_date = %s"
+                cursor.execute(query, (last_date,))
+                rows = cursor.fetchall()
 
-    def __update_data_to_db__(self):
+                cursor.close()
+                print(rows)
+                return rows
+            else:
+                cursor.close()
+                return None
+            
+    def __determine_actions__(self):
+        """
+        判斷這次的重量、次數以及休息時間
+        """
+        last_actions = self.__fetch_data_from_db__()
+        
+
+    def insert_data_to_db(self):
         pass
         
 
