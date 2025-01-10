@@ -114,9 +114,9 @@ class action_state(object):
 
 
 
-        print(self.__joint_angle__2(left_elbow, left_wrist, left_shoulder))
-        print(self.__joint_angle__2(right_elbow, right_wrist, right_shoulder))
-        print(self.repetition)
+        # print(self.__joint_angle__2(left_elbow, left_wrist, left_shoulder))
+        # print(self.__joint_angle__2(right_elbow, right_wrist, right_shoulder))
+        # print(self.repetition)
 
         if (self.__joint_angle__2(left_elbow, left_wrist, left_shoulder) > 130 and
             self.__joint_angle__2(right_elbow, right_wrist, right_shoulder) > 130):
@@ -142,6 +142,8 @@ class action_state(object):
             print("key joint is not is list")
             os.system("pause")
             return
+        
+        self.action_track.append([left_wrist, right_wrist])#全部動作的軌跡
 
         if (self.__joint_angle__2(left_elbow, left_wrist, left_shoulder) < 130 and
             self.__joint_angle__2(right_elbow, right_wrist, right_shoulder) < 130):
@@ -269,6 +271,26 @@ class action_state(object):
             if l == [0,0]:
                 return False
         return True
+
+    def __calculate_score__(self) -> float:
+        """
+        計算分數，分數=次數*重量
+        """
+        """
+        兩條直線，對所有action track算出到直線距離，並打分
+        """
+        coefficient_a1 = self.standard_track[0][0][1]-self.standard_track[0][1][1] #y1-y2 = the coefficient of the x
+        coefficient_b1 = self.standard_track[0][1][0]-self.standard_track[0][0][0] #x2-x1 = the coefficient of the y
+        coefficient_c1 = coefficient_a1*self.standard_track[0][0][0]+coefficient_b1*self.standard_track[0][0][1]
+        #x1*coe. of x + y1*coe. of y = c
+        coefficient_a2 = self.standard_track[1][0][1]-self.standard_track[1][1][1]
+        coefficient_b2 = self.standard_track[1][1][0]-self.standard_track[1][0][0]
+        coefficient_c2 = coefficient_a2*self.standard_track[1][0][0]+coefficient_b2*self.standard_track[1][0][1]
+
+        #forall point in action track, calculate the distance to the line
+        
+
+        
     
     def __fetch_data_from_db__(self):
         """

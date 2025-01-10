@@ -6,6 +6,7 @@ def create_connection():
         user="admin",
         password="33818236",
         database="demo_database"
+        table="workout_data"
     )
     return connection
 
