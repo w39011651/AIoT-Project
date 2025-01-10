@@ -29,6 +29,7 @@ class action_state(object):
     
     __ACTION_OFFSET__ = 100 # 動作高點(可能需可變?)
     __exhaustion_threshold__ = 5
+    __MOVE_THRESHOLD__ = 100 #超過此值視為偵測錯誤
     
     __target_repetition__ = 5#from SQL
     __target_rest_time__ = 10#休息時間#from SQL
@@ -109,8 +110,15 @@ class action_state(object):
             os.system("pause")
             return
         
-
-        self.action_track.append([left_wrist, right_wrist])#全部動作的軌跡
+        if len(self.action_track) == 0:
+            self.action_track.append([left_wrist, right_wrist])#全部動作的軌跡
+        else:
+            prev_point = self.action_track[-1]
+            curr_point = [left_wrist, right_wrist]
+            if (self.__two_point_distance__(prev_point[0], curr_point[0]) < self.__MOVE_THRESHOLD__ 
+            and self.__two_point_distance__(prev_point[1], curr_point[1]) < self.__MOVE_THRESHOLD__):
+                """在手腕移動不超過閾值時，才會被記錄"""
+                self.action_track.append([left_wrist, right_wrist])#全部動作的軌跡
 
 
 
@@ -143,7 +151,15 @@ class action_state(object):
             os.system("pause")
             return
         
-        self.action_track.append([left_wrist, right_wrist])#全部動作的軌跡
+        if len(self.action_track) == 0:
+            self.action_track.append([left_wrist, right_wrist])#全部動作的軌跡
+        else:
+            prev_point = self.action_track[-1]
+            curr_point = [left_wrist, right_wrist]
+            if (self.__two_point_distance__(prev_point[0], curr_point[0]) < self.__MOVE_THRESHOLD__ 
+            and self.__two_point_distance__(prev_point[1], curr_point[1]) < self.__MOVE_THRESHOLD__):
+                """在手腕移動不超過閾值時，才會被記錄"""
+                self.action_track.append([left_wrist, right_wrist])#全部動作的軌跡
 
         if (self.__joint_angle__2(left_elbow, left_wrist, left_shoulder) < 130 and
             self.__joint_angle__2(right_elbow, right_wrist, right_shoulder) < 130):
@@ -288,9 +304,14 @@ class action_state(object):
         coefficient_c2 = coefficient_a2*self.standard_track[1][0][0]+coefficient_b2*self.standard_track[1][0][1]
 
         #forall point in action track, calculate the distance to the line
-        
+        for list in self.action_track:
+            left_pt = list[0]
+            right_pt = list[1]
+            distance1 = abs(coefficient_a1*left_pt[0]+coefficient_b1*left_pt[1]-coefficient_c1)/math.sqrt(pow(coefficient_a1,2)+pow(coefficient_b1,2))
+            distance2 = abs(coefficient_a2*right_pt[0]+coefficient_b2*right_pt[1]-coefficient_c2)/math.sqrt(pow(coefficient_a2,2)+pow(coefficient_b2,2))
 
-        
+    def __two_point_distance__(self, pt1, pt2)->float:
+        return math.sqrt(pow(pt1[0]-pt2[0],2)+pow(pt1[1]-pt2[1],2))
     
     def __fetch_data_from_db__(self):
         """

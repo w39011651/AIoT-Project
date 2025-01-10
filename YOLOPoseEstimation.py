@@ -192,6 +192,6 @@ if __name__ == '__main__':
     shoulder_press_judger = action_state()
     #print("Person Detection Model Device:", predictor_person_detection.model.device)
 
-    #show_video(video_path, False)
+    show_video(video_path, False)
     #show_video(video_path, True)
-    show_video_from_http(FLASK_URL)
+    #show_video_from_http(FLASK_URL)
