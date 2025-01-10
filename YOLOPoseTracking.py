@@ -34,9 +34,11 @@ class action_state(object):
     
     __db_connection__ = None
     #動作列表 __target_action_list__ #from SQL
-    __target_repetition__ = 5#from SQL
-    __target_rest_time__ = 10#休息時間#from SQL
-    __set_weight__ = 10#(from SQL)
+    __set_indicator__ = 0#第幾組
+    __target_repetition__ = []#from SQL
+    __target_rest_time__ = []#休息時間#from SQL
+    __target_weight__ = []#(from SQL)
+    #長度代表組數
 
     def test_method(self):
         self.__fetch_data_from_db__()
@@ -47,6 +49,7 @@ class action_state(object):
         self.action_track = list()
         self.standard_track = list()
         self.__db_connection__ = self.__connect_to_db__()
+        self.__determine_actions__()
     
     def detect(self, keypoints):
         if self.__current_state__ is state.ready:
@@ -367,7 +370,57 @@ class action_state(object):
         判斷這次的重量、次數以及休息時間
         """
         last_actions = self.__fetch_data_from_db__()
-        
+        """action_target = [weight, repetition, set_number, rest_time]"""
+        action_target = []
+        if last_actions is None:
+            """如果是第一次: 重量10, 次數15, 休息時間1:30"""
+            action_target = [5,15,3,90]
+        else:
+            """
+            如果不是第一次，判斷上次的組數、次數、休息時間和重量的差值
+            決定這次的重量、次數和休息時間
+            """
+            """
+            algo:
+            重量: 
+            如果減少，則保持重量、增加目標次數
+            如果增加或不變，則可以增加重量
+            次數: 
+            如果到達12~15區間，則增加重量
+            如果為6~8區間且重量下降，則增加組數
+            休息時間:
+            12~15區間: 1:30
+            8~12區間: 2:00
+            6~8區間: 3:00
+            """
+            weight_diff = last_actions[-1]["weight"] - last_actions[0]["weight"]
+            set_number = len(last_actions)
+            repetition = last_actions[0]["repetition"]
+
+            if weight_diff < 0:
+                action_target.append(last_actions[-1]["weight"])
+                if repetition < 12:
+                    action_target.append(repetition+3)
+                    action_target.append(set_number)
+                else:
+                    action_target.append(repetition)
+                    action_target.append(set_number+1)
+            else:
+                action_target.append(last_actions[-1]["weight"]+1.25)
+                action_target.append(repetition)
+                action_target.append(set_number)
+
+            if repetition >= 12:
+                action_target.append(90)
+            elif repetition >= 8:
+                action_target.append(120)
+            else:
+                action_target.append(180)
+
+        for _ in range(0, action_target[2]):
+            self.__target_weight__.append(action_target[0])
+            self.__target_repetition__.append(action_target[1])
+            self.__target_rest_time__.append(action_target[3])       
 
     def insert_data_to_db(self):
         pass
