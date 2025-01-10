@@ -5,7 +5,8 @@ def create_connection():
          host="database-3.chqsqk42y3iv.us-east-1.rds.amazonaws.com",
         user="admin",
         password="33818236",
-        database="demo_database"
+        database="demo_database",
+        table="workout_data"
     )
     return connection
 

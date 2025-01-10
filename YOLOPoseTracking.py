@@ -5,6 +5,7 @@ from YOLOPoseConstant import shoulder_press_joint_index as sp_idx
 import math
 import os
 import cv2
+import mysql.connector
 
 class state(Enum):
     ready = 0
@@ -29,16 +30,32 @@ class action_state(object):
     
     __ACTION_OFFSET__ = 100 # 動作高點(可能需可變?)
     __exhaustion_threshold__ = 5
+    __MOVE_THRESHOLD__ = 100 #超過此值視為偵測錯誤
     
-    __target_repetition__ = 5#from SQL
-    __target_rest_time__ = 10#休息時間#from SQL
-    __set_weight__ = 10#(from SQL)
+    __db_connection__ = None
+    __set_indicator__ = 0#第幾組
+    __target_set_count__ = 0#目標組數
+    __target_repetition__ = []#from SQL
+    __target_rest_time__ = []#休息時間#from SQL
+    __target_weight__ = []#(from SQL)
+    __score_record__ = []#紀錄每次動作的分數
+    #長度代表組數
+
+    def test_method(self):
+        self.__target_set_count__ = 3
+        self.__target_repetition__ = [15, 15, 15]
+        self.__target_rest_time__ = [90, 90, 90]
+        self.__target_weight__ = [10, 10, 10]
+        self.__score_record__ = [80, 80, 80]
+        self.insert_data_to_db()
 
     def __init__(self):
         self.__current_state__ = state.ready
         self.repetition = 0
         self.action_track = list()
         self.standard_track = list()
+        self.__db_connection__ = self.__connect_to_db__()
+        self.__determine_actions__()
     
     def detect(self, keypoints):
         if self.__current_state__ is state.ready:
@@ -65,10 +82,19 @@ class action_state(object):
         
         elif len(self.standard_track) == 0:#不重複加入
             try:
+                #手肘可能不會被偵測到而變為[0,0]
+                SLOPE = 3.7320508075688#斜率=tan60^o
                 left_begin_xy = list(map(int,keypoints.xy[0][sp_idx.left_wrist.value][:2]))#將肘部關節轉換為整數列表
-                left_end_xy = [left_begin_xy[0], max(left_begin_xy[1] - self.__ACTION_OFFSET__, 0)]
                 right_begin_xy = list(map(int,keypoints.xy[0][sp_idx.right_wrist.value][:2]))
-                right_end_xy = [right_begin_xy[0], max(right_begin_xy[1]-self.__ACTION_OFFSET__, 0)]
+
+                if left_begin_xy == [0,0] or right_begin_xy == [0,0]:
+                    return
+
+                #left_end_xy = [left_begin_xy[0], 0]#更改為到最上面(因為只看橫移)
+                left_end_xy = [int(left_begin_xy[0] - left_begin_xy[1]//SLOPE), 0]
+                #right_end_xy = [right_begin_xy[0], 0]
+                right_end_xy = [int(right_begin_xy[0] + right_begin_xy[1]//SLOPE), 0]
+
                 self.standard_track.append((left_begin_xy, left_end_xy))
                 self.standard_track.append((right_begin_xy, right_end_xy))
             except IndexError as e:
@@ -109,14 +135,21 @@ class action_state(object):
             os.system("pause")
             return
         
+        if len(self.action_track) == 0:
+            self.action_track.append([left_wrist, right_wrist])#全部動作的軌跡
+        else:
+            prev_point = self.action_track[-1]
+            curr_point = [left_wrist, right_wrist]
+            if (self.__two_point_distance__(prev_point[0], curr_point[0]) < self.__MOVE_THRESHOLD__ 
+            and self.__two_point_distance__(prev_point[1], curr_point[1]) < self.__MOVE_THRESHOLD__):
+                """在手腕移動不超過閾值時，才會被記錄"""
+                self.action_track.append([left_wrist, right_wrist])#全部動作的軌跡
 
-        self.action_track.append([left_wrist, right_wrist])#全部動作的軌跡
 
 
-
-        print(self.__joint_angle__2(left_elbow, left_wrist, left_shoulder))
-        print(self.__joint_angle__2(right_elbow, right_wrist, right_shoulder))
-        print(self.repetition)
+        # print(self.__joint_angle__2(left_elbow, left_wrist, left_shoulder))
+        # print(self.__joint_angle__2(right_elbow, right_wrist, right_shoulder))
+        # print(self.repetition)
 
         if (self.__joint_angle__2(left_elbow, left_wrist, left_shoulder) > 130 and
             self.__joint_angle__2(right_elbow, right_wrist, right_shoulder) > 130):
@@ -142,6 +175,16 @@ class action_state(object):
             print("key joint is not is list")
             os.system("pause")
             return
+        
+        if len(self.action_track) == 0:
+            self.action_track.append([left_wrist, right_wrist])#全部動作的軌跡
+        else:
+            prev_point = self.action_track[-1]
+            curr_point = [left_wrist, right_wrist]
+            if (self.__two_point_distance__(prev_point[0], curr_point[0]) < self.__MOVE_THRESHOLD__ 
+            and self.__two_point_distance__(prev_point[1], curr_point[1]) < self.__MOVE_THRESHOLD__):
+                """在手腕移動不超過閾值時，才會被記錄"""
+                self.action_track.append([left_wrist, right_wrist])#全部動作的軌跡
 
         if (self.__joint_angle__2(left_elbow, left_wrist, left_shoulder) < 130 and
             self.__joint_angle__2(right_elbow, right_wrist, right_shoulder) < 130):
@@ -166,6 +209,7 @@ class action_state(object):
             return
         
         if self.__time_counter__ is None:
+            self.__set_indicator__ += 1
             self.__time_counter__ = threading.Thread(target=self.__timer__)
             self.__time_counter__.start()
 
@@ -269,16 +313,134 @@ class action_state(object):
             if l == [0,0]:
                 return False
         return True
+
+    def __calculate_score__(self) -> float:
+        """
+        兩條直線，對所有action track算出到直線距離，並打分
+        """
+        coefficient_a1 = self.standard_track[0][0][1]-self.standard_track[0][1][1] #y1-y2 = the coefficient of the x
+        coefficient_b1 = self.standard_track[0][1][0]-self.standard_track[0][0][0] #x2-x1 = the coefficient of the y
+        coefficient_c1 = coefficient_a1*self.standard_track[0][0][0]+coefficient_b1*self.standard_track[0][0][1]
+        #x1*coe. of x + y1*coe. of y = c
+        coefficient_a2 = self.standard_track[1][0][1]-self.standard_track[1][1][1]
+        coefficient_b2 = self.standard_track[1][1][0]-self.standard_track[1][0][0]
+        coefficient_c2 = coefficient_a2*self.standard_track[1][0][0]+coefficient_b2*self.standard_track[1][0][1]
+        total_distance = 0
+        #forall point in action track, calculate the distance to the line
+        for list in self.action_track:
+            left_pt = list[0]
+            right_pt = list[1]
+            distance1 = abs(coefficient_a1*left_pt[0]+coefficient_b1*left_pt[1]-coefficient_c1)/math.sqrt(pow(coefficient_a1,2)+pow(coefficient_b1,2))
+            distance2 = abs(coefficient_a2*right_pt[0]+coefficient_b2*right_pt[1]-coefficient_c2)/math.sqrt(pow(coefficient_a2,2)+pow(coefficient_b2,2))
+            total_distance = total_distance + distance1 + distance2
+            #分數: score = 100 - coefficient\times\sum_{i=1}^{n} distance
+        self.action_track.clear()
+        return 0.5*total_distance
+
+    def __two_point_distance__(self, pt1, pt2)->float:
+        return math.sqrt(pow(pt1[0]-pt2[0],2)+pow(pt1[1]-pt2[1],2))
+    
+    def __connect_to_db__(self):
+        connection = mysql.connector.connect(
+        host="database-1.c7862uku0eq4.ap-northeast-1.rds.amazonaws.com",
+        user="admin",
+        password="33818236",
+        database="demo_database"
+        )
+        return connection
     
     def __fetch_data_from_db__(self):
         """
         database structure:
-        id----date----weight----repetition----rest_time----score
+        id----workout_date----weight----repetition----rest_time----score
         """
-        pass
+        with self.__db_connection__ as conn:
+            cursor=conn.cursor(dictionary=True, buffered=True)
+            cursor.execute("SELECT * FROM workout_data")
+            last_action = cursor.fetchone()#找到最後一筆資料
+            cursor.reset()
+            if last_action:
+                last_date = last_action['workout_date']
+                query = "SELECT * FROM workout_data WHERE workout_date = %s"
+                cursor.execute(query, (last_date,))
+                rows = cursor.fetchall()
 
-    def __update_data_to_db__(self):
-        pass
+                cursor.close()
+                print(rows)
+                return rows
+            else:
+                cursor.close()
+                return None
+            
+    def __determine_actions__(self):
+        """
+        判斷這次的重量、次數以及休息時間
+        """
+        last_actions = self.__fetch_data_from_db__()
+        """action_target = [weight, repetition, set_number, rest_time]"""
+        action_target = []
+        if last_actions is None:
+            """如果是第一次: 重量10, 次數15, 休息時間1:30"""
+            action_target = [5,15,3,90]
+        else:
+            """
+            如果不是第一次，判斷上次的組數、次數、休息時間和重量的差值
+            決定這次的重量、次數和休息時間
+            """
+            """
+            algo:
+            重量: 
+            如果減少，則保持重量、增加目標次數
+            如果增加或不變，則可以增加重量
+            次數: 
+            如果到達12~15區間，則增加重量
+            如果為6~8區間且重量下降，則增加組數
+            休息時間:
+            12~15區間: 1:30
+            8~12區間: 2:00
+            6~8區間: 3:00
+            """
+            weight_diff = last_actions[-1]["weight"] - last_actions[0]["weight"]
+            set_number = len(last_actions)
+            repetition = last_actions[0]["repetition"]
+
+            if weight_diff < 0:
+                action_target.append(last_actions[-1]["weight"])
+                if repetition < 12:
+                    action_target.append(repetition+3)
+                    action_target.append(set_number)
+                else:
+                    action_target.append(repetition)
+                    action_target.append(set_number+1)
+            else:
+                action_target.append(last_actions[-1]["weight"]+1.25)
+                action_target.append(repetition)
+                action_target.append(set_number)
+
+            if repetition >= 12:
+                action_target.append(90)
+            elif repetition >= 8:
+                action_target.append(120)
+            else:
+                action_target.append(180)
+
+        self.__target_set_count__ = action_target[2]
+        for _ in range(0, self.__target_set_count__):
+            self.__target_weight__.append(action_target[0])
+            self.__target_repetition__.append(action_target[1])
+            self.__target_rest_time__.append(action_target[3])      
+
+    def insert_data_to_db(self):
+        with self.__db_connection__ as conn:
+            conn.reconnect()
+            cursor=conn.cursor()
+            sql = "INSERT INTO workout_data (workout_date, weight, repetition, rest_time, score) VALUES (%s, %s, %s, %s, %s)"
+            
+            for i in range(self.__target_set_count__):
+                rest_time_str = f"00:{self.__target_rest_time__[i]//60}:{self.__target_rest_time__[i]%60}"
+                cursor.execute(sql, (time.strftime("%Y-%m-%d"), self.__target_weight__[i], self.__target_repetition__[i], rest_time_str, self.__score_record__[i]))
+                conn.commit()
+            cursor.close()
         
 
         

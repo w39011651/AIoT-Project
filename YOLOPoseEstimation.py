@@ -88,17 +88,18 @@ def draw_trail(fixed_height, fixed_width)->cv2.Mat:
     global shoulder_press_judger
 
     back_ground = np.ones((fixed_height, fixed_width), dtype=np.uint8)*255
-    back_ground = cv2.cvtColor(back_ground, cv2.COLOR_GRAY2RGB)
+    back_ground = cv2.cvtColor(back_ground, cv2.COLOR_GRAY2BGR)
 
     cv2.line(back_ground,
                  (shoulder_press_judger.standard_track[0][0]), #standard_track[0]為單隻手的起/終點 
                  (shoulder_press_judger.standard_track[0][1]),
-                 (255,0,255), 2)
+                 (0,0,255), 2)
+    print("draw left standard track")
     cv2.line(back_ground,
                  (shoulder_press_judger.standard_track[1][0]), #standard_track[0]為單隻手的起/終點 
                  (shoulder_press_judger.standard_track[1][1]),
-                 (255,0,255), 2)
-    
+                 (0,0,255), 2)
+    print("draw right standard track")
     size_of_track = len(shoulder_press_judger.action_track)
     for i in range(1, size_of_track):
         cv2.line(back_ground, shoulder_press_judger.action_track[i][0]
@@ -191,7 +192,8 @@ if __name__ == '__main__':
     HORIZON_MOVE_THRESHOULD = 10.0
     shoulder_press_judger = action_state()
     #print("Person Detection Model Device:", predictor_person_detection.model.device)
-
-    #show_video(video_path, False)
+    shoulder_press_judger.test_method()
+    exit()
+    show_video(video_path, False)
     #show_video(video_path, True)
-    show_video_from_http(FLASK_URL)
+    #show_video_from_http(FLASK_URL)
