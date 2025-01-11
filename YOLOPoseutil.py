@@ -7,7 +7,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 _overrides_person_pose = {"task":"pose",
                           "mode":"predict",
-                          "model":"yolov8l-pose.pt",
+                          "model":"yolov8m-pose.pt",
                           "save":False,
                           "verbose":False,
                           "classes":[0],

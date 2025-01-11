@@ -1,6 +1,7 @@
 from enum import Enum
 import time
 import threading
+import urllib.request
 from YOLOPoseConstant import shoulder_press_joint_index as sp_idx
 import os
 import threading
@@ -9,6 +10,7 @@ import time
 import cv2
 import mysql.connector
 from PIL import Image
+import urllib
 
 class state(Enum):
     ready = 0
@@ -48,6 +50,8 @@ class action_state(object):
     __exhaustion_counter__ = threading.Event() #疲勞標誌
     __time_flag__ = False #時間標誌 #避免time()重複賦予
     __rest_time__ = 0 #休息時間
+
+    __last_get__ = -1#避免重複連線
 
     def test_method(self):
         self.__target_set_count__ = 3
@@ -93,8 +97,8 @@ class action_state(object):
                     (width - text_width - 10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         
         # 畫面下方中央 - 疲勞警告（類似字幕位置）
-        if self.__fail_flag__ and self.__current_state__ is state.end:
-            warning_text = "Warning: 檢測到疲勞狀態！重新開始"
+        if self.__fail_flag__ and self.__current_state__ is state.end and self.__fail_counter__ < 2:
+            warning_text = "Warning: Detect Exhausted Status, Rest"
             (text_width, text_height), baseline = cv2.getTextSize(warning_text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)
 
             text_x = (width - text_width) // 2
@@ -103,24 +107,33 @@ class action_state(object):
                         (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
         
         if self.__fail_counter__ >= 2 and self.__fail_flag__:
-            warning_text = "Warning: 連續動作失敗超過兩次，建議結束本次訓練！"
+            warning_text = "Warning: Fail twice, End the action"
             (text_width, text_height), baseline = cv2.getTextSize(warning_text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)
 
             text_x = (width - text_width) // 2
             text_y = int(height * 0.85)
             cv2.putText(image, warning_text,
                         (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+            
+        if not self.__fail_flag__ and self.__current_state__ is state.end:
+            score_text = f"action score : {100 - self.__score_record__[self.__set_indicator__-1]:.2f}"
+            (text_width, text_height), baseline = cv2.getTextSize(score_text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)
+
+            text_x = (width - text_width) // 2
+            text_y = int(height * 0.85)
+            cv2.putText(image, score_text,
+                        (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
         
         # 畫面正中央 - 休息時間
-        if self.__current_state__ is state.end and self.__time_counter__ is not None:
+        if self.__current_state__ is state.end and self.__set_indicator__ < self.__target_set_count__:
             if self.__set_indicator__ < self.__target_set_count__:
                 rest_text = f"Rest Time: {self.__target_rest_time__[self.__set_indicator__] - self.__rest_time__}s"
                 (text_width, text_height), baseline = cv2.getTextSize(rest_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
                 
                 text_x = (width - text_width) // 2
                 text_y = height // 2
-            elif self.__set_indicator__ + 1 == self.__target_set_count__:
-                rest_text = "目標組數完成, Congratulation!"
+            elif self.__set_indicator__ == self.__target_set_count__:
+                rest_text = "Complete the target, Congratulation!"
                 (text_width, text_height), baseline = cv2.getTextSize(rest_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
                 
             # # 半透明背景
@@ -145,15 +158,28 @@ class action_state(object):
         """
         肩推動作流程檢測
         """
+        url_path = ["http://192.168.1.134:5000/begin","http://192.168.1.134:5000/start",
+                    "http://192.168.1.134:5000/action","http://192.168.1.134:5000/rest"]
+        if self.__current_state__.value != self.__last_get__:
+            urllib.request.urlopen(url_path[self.__current_state__.value])
+            self.__last_get__ = self.__current_state__.value
+        
+        #只有在變更狀態時，才要發送get請求
+        #如何判斷變更狀態?
+        #如果current_state.value不同於last_get
+        #發送新請求
+        #如果一樣，則不執行
+
+
         if self.__current_state__ is state.ready:
-            self.__begin__(keypoints) #開始動作
+            self.__begin__(keypoints) #開始動作"
         elif self.__current_state__ is state.start:
             self.__concentric__(keypoints) #肩推進行中(向上)
         elif self.__current_state__ is state.action:
             self.__eccentric__(keypoints) #肩推進行中(向下)
         elif self.__current_state__ is state.end:
             self.__rest__() #休息時間
-        
+     
         return self.render_text(image)
 
     def __begin__(self, keypoints):
@@ -171,11 +197,11 @@ class action_state(object):
                 
         is_shoulder_press = self.__is_shoulder_press__(keypoints)
         
-        if is_shoulder_press:
+        if is_shoulder_press and len(self.standard_track) > 0:
             print("nextstage")  
             self.repetition = 0
             self.__next_state__()
-        elif len(self.standard_track) == 0: #不重複加入
+        elif is_shoulder_press and len(self.standard_track) == 0: #不重複加入
             try:
                 #手肘可能不會被偵測到而變為[0,0]
                 SLOPE = 3.7320508075688 #斜率=tan60^o
@@ -302,6 +328,9 @@ class action_state(object):
                 self.__next_state__(False)
             else:
                 self.__next_state__(True)
+                __set_score__ = self.__calculate_score__()
+                print(f"動作分數:{__set_score__}")
+                self.__score_record__.append(__set_score__)
 
     def __rest__(self):
         """
@@ -320,12 +349,9 @@ class action_state(object):
 
         if self.__fail_counter__ >= 2 and self.__fail_flag__:
             print("連續動作失敗超過兩次，建議結束本次訓練！")
-            return
-        
-        if self.__time_counter__ is None:
-            __set_score__ = self.__calculate_score__()
-            print(f"動作分數:{__set_score__}")
-            self.__score_record__.append(__set_score__)
+            self.__time_counter__ = threading.Thread(target = self.__end_timer__)
+            self.__time_counter__.start()
+            
         #休息時間計時
         if self.__set_indicator__ < self.__target_set_count__ - 1:
             self.__time_counter__ = threading.Thread(target=self.__timer__)
@@ -333,6 +359,8 @@ class action_state(object):
         elif self.__set_indicator__ + 1 == self.__target_set_count__:
             print(f"目標組數完成, Congratulation!")
             self.insert_data_to_db()
+            self.__time_counter__ = threading.Thread(target = self.__end_timer__)
+            self.__time_counter__.start()
 
     def __exhaustion__(self) -> bool:
         """
@@ -359,6 +387,13 @@ class action_state(object):
         self.__set_indicator__ += 1
         self.__next_state__()
         self.__time_counter__ = None
+
+    def __end_timer__(self):
+        count_down = 5
+        while self.__rest_time__ < count_down:
+            time.sleep(1)
+            self.__rest_time__ += 1
+        os._exit(1)
 
     def __is_working__(self, keypoints) -> bool:
         """
@@ -499,12 +534,21 @@ class action_state(object):
         return math.sqrt(pow(pt1[0]-pt2[0],2)+pow(pt1[1]-pt2[1],2))
     
     def __connect_to_db__(self):
-        connection = mysql.connector.connect(
-        host="database-1.c7862uku0eq4.ap-northeast-1.rds.amazonaws.com",
-        user="admin",
-        password="33818236",
-        database="demo_database"
-        )
+        rec_cnt = 0
+        while True:
+            try:
+                connection = mysql.connector.connect(
+                host="database-1.c7862uku0eq4.ap-northeast-1.rds.amazonaws.com",
+                user="admin",
+                password="33818236",
+                database="demo_database"
+                )
+                break
+            except mysql.connector.errors.DatabaseError:
+                rec_cnt+=1
+                print(f'reconnection times:{rec_cnt}')
+
+            
         return connection
     
     def __fetch_data_from_db__(self):
@@ -576,11 +620,11 @@ class action_state(object):
                 action_target.append(set_number)
 
             if repetition >= 12:
-                action_target.append(90)
+                action_target.append(30)#divide 10 for demo time
             elif repetition >= 8:
-                action_target.append(120)
+                action_target.append(30)
             else:
-                action_target.append(180)
+                action_target.append(30)
 
         self.__target_set_count__ = action_target[2]
         for _ in range(0, self.__target_set_count__):
@@ -590,7 +634,16 @@ class action_state(object):
 
     def insert_data_to_db(self):
         with self.__db_connection__ as conn:
-            conn.reconnect()
+
+            rec_cnt = 0
+            while True:
+                try:
+                    conn.reconnect()
+                    break
+                except mysql.connector.errors.InterfaceError:
+                    rec_cnt+=1
+                    print(f"reconnect times:{rec_cnt}")
+                    
             cursor=conn.cursor()
             sql = "INSERT INTO workout_data (workout_date, weight, repetition, rest_time, score) VALUES (%s, %s, %s, %s, %s)"
             
