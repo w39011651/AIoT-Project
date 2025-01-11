@@ -69,7 +69,7 @@ def plot_track(img, keypoints, prev_keypoints, line_color = (0,0,255))->cv2.Mat:
             #print(f"len of curr_data:{len(curr_data)} and the len of prev_data:{len(prev_data)}")
             continue
 
-        shoulder_press_judger.detect(keypoints)
+        img = shoulder_press_judger.detect(keypoints, img)
         shoulder_press_judger.print_current_state()
 
         for i, (curr_point, prev_point)  in enumerate(zip(curr_data, prev_data)):
@@ -133,21 +133,22 @@ def show_video(my_video_path, self_camera = False):
         if img_height is None and img_width is None:
             img_height, img_width = frame.shape[:2]
         #img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        skip_frame_counting+=1
+        skip_frame_counting += 1
         if skip_frame_counting % SKIP_FRAME_COUNTING != 0:
             continue
         img = frame
         result = predictor_person_pose(img)
-        person_pose = result[0][0]#偵測人數n : person_pose = result[0][:n+1]
+        person_pose = result[0][0] #偵測人數n : person_pose = result[0][:n+1]
         #透視變換要偵測2次，可能會影響效能
         img = plot_keypoints(img, person_pose.keypoints)
         if prev_person_pose is not None:
             img = plot_track(img, person_pose.keypoints, prev_person_pose.keypoints)
         prev_person_pose = person_pose
         #判定動作品質
-        cv2.imshow("img", img)
-        if cv2.waitKey(2) & 0xFF == ord('q'):
-            break
+        if img is not None and img.size > 0:
+            cv2.imshow("img", img)
+            if cv2.waitKey(2) & 0xFF == ord('q'):
+                break
     cap.release()
     cv2.destroyAllWindows()
     ret_background = draw_trail(img_height, img_width)
@@ -180,9 +181,6 @@ def show_video_from_http(url):
                 break
     cv2.destroyAllWindows()
 
-
-
-
 if __name__ == '__main__':
     FLASK_URL = 'http://172.20.10.10:5000'
     video_path = 'testData.mp4'
@@ -193,7 +191,7 @@ if __name__ == '__main__':
     shoulder_press_judger = action_state()
     #print("Person Detection Model Device:", predictor_person_detection.model.device)
     shoulder_press_judger.test_method()
-    exit()
-    show_video(video_path, False)
-    #show_video(video_path, True)
+    #exit()
+    #show_video(video_path, False)
+    show_video(video_path, True)
     #show_video_from_http(FLASK_URL)
