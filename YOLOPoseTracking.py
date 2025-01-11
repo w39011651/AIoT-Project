@@ -1,6 +1,7 @@
 from enum import Enum
 import time
 import threading
+import urllib.request
 from YOLOPoseConstant import shoulder_press_joint_index as sp_idx
 import os
 import threading
@@ -9,6 +10,7 @@ import time
 import cv2
 import mysql.connector
 from PIL import Image
+import urllib
 
 class state(Enum):
     ready = 0
@@ -146,13 +148,17 @@ class action_state(object):
         肩推動作流程檢測
         """
         if self.__current_state__ is state.ready:
-            self.__begin__(keypoints) #開始動作
+            self.__begin__(keypoints) #開始動作"
+            urllib.request.urlopen("http://192.168.1.134:5000/begin")
         elif self.__current_state__ is state.start:
             self.__concentric__(keypoints) #肩推進行中(向上)
+            urllib.request.urlopen("http://192.168.1.134:5000/start")
         elif self.__current_state__ is state.action:
             self.__eccentric__(keypoints) #肩推進行中(向下)
+            urllib.request.urlopen("http://192.168.1.134:5000/action")
         elif self.__current_state__ is state.end:
             self.__rest__() #休息時間
+            urllib.request.urlopen("http://192.168.1.134:5000/rest")
         
         return self.render_text(image)
 
