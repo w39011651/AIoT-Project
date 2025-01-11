@@ -47,6 +47,7 @@ class action_state(object):
     __current_time__ = 0 #當前時間
     __exhaustion_counter__ = threading.Event() #疲勞標誌
     __time_flag__ = False #時間標誌 #避免time()重複賦予
+    __rest_time__ = 0 #休息時間
 
     def test_method(self):
         self.__target_set_count__ = 3
@@ -104,7 +105,7 @@ class action_state(object):
         # 畫面正中央 - 休息時間
         if self.__current_state__ is state.end and self.__time_counter__ is not None:
             if self.__set_indicator__ < self.__target_set_count__:
-                rest_text = f"Rest Time: {self.__target_rest_time__[self.__set_indicator__]}s"
+                rest_text = f"Rest Time: {self.__target_rest_time__[self.__set_indicator__] - self.__rest_time__}s"
                 (text_width, text_height), baseline = cv2.getTextSize(rest_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
                 
                 text_x = (width - text_width) // 2
@@ -336,12 +337,12 @@ class action_state(object):
         """
         計時器
         """
-        rest_time = 0
+        self.__rest_time__ = 0
 
-        while rest_time < self.__target_rest_time__[self.__set_indicator__]:
+        while self.__rest_time__ < self.__target_rest_time__[self.__set_indicator__]:
             time.sleep(1)
-            rest_time += 1
-            print(f"第{self.__set_indicator__+1}組結束, 休息時間:{rest_time}秒")
+            self.__rest_time__ += 1
+            print(f"第{self.__set_indicator__+1}組結束, 休息時間:{self.__rest_time__}秒")
         self.__set_indicator__ += 1
         self.__next_state__()
         self.__time_counter__ = None
