@@ -161,8 +161,13 @@ def show_video(my_video_path, self_camera = False):
     #     return
 
 def show_video_from_http(url):
+    global prev_person_pose, img_height, img_width, shoulder_press_judger
+
+    SKIP_FRAME_COUNTING = 2
+    skip_frame_counting = 1
     stream = urllib.request.urlopen(url)
     bytes_data = b''
+
     while True:
         bytes_data += stream.read(1024)
         start_idx = bytes_data.find(b'\xff\xd8')
@@ -172,17 +177,32 @@ def show_video_from_http(url):
             bytes_data = bytes_data[end_idx+2:]
             np_array = np.frombuffer(jpg_data, dtype=np.uint8)
             img = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
-            #img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            persons_pose = predictor_person_pose(img)[0]
-            img = plot_keypoints(img, persons_pose.keypoints)
-            
-            cv2.imshow("img", img)
-            if cv2.waitKey(2) & 0xFF == ord('q'):
-                break
+
+            skip_frame_counting += 1
+            if skip_frame_counting % SKIP_FRAME_COUNTING != 0:
+                continue
+            frame = img
+            if img_height is None and img_width is None:
+                img_height, img_width = frame.shape[:2]
+            result = predictor_person_pose(img)
+            person_pose = result[0][0] #偵測人數n : person_pose = result[0][:n+1]
+            #透視變換要偵測2次，可能會影響效能
+            img = plot_keypoints(img, person_pose.keypoints)
+
+            if prev_person_pose is not None:
+                img = plot_track(img, person_pose.keypoints, prev_person_pose.keypoints)
+            prev_person_pose = person_pose
+            #判定動作品質
+            if img is not None and img.size > 0:
+                cv2.imshow("img", img)
+                if cv2.waitKey(2) & 0xFF == ord('q'):
+                    break
+
     cv2.destroyAllWindows()
 
+
 if __name__ == '__main__':
-    FLASK_URL = 'http://172.20.10.10:5000'
+    FLASK_URL = 'http://192.168.1.134:5000'
     video_path = 'testData.mp4'
     print("Person Pose Model Device:", predictor_person_pose.device)
     prev_person_pose = None
@@ -193,5 +213,5 @@ if __name__ == '__main__':
     #shoulder_press_judger.test_method()
     #exit()
     #show_video(video_path, False)
-    show_video(video_path, True)
-    #show_video_from_http(FLASK_URL)
+    #show_video(video_path, True)
+    show_video_from_http(FLASK_URL)
