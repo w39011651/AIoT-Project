@@ -141,8 +141,8 @@ def show_video(my_video_path, self_camera = False):
         person_pose = result[0][0] #偵測人數n : person_pose = result[0][:n+1]
         #透視變換要偵測2次，可能會影響效能
         img = plot_keypoints(img, person_pose.keypoints)
-        # if prev_person_pose is not None:
-        #     img = plot_track(img, person_pose.keypoints, prev_person_pose.keypoints)
+        if prev_person_pose is not None:
+            img = plot_track(img, person_pose.keypoints, prev_person_pose.keypoints)
         prev_person_pose = person_pose
         #判定動作品質
         if img is not None and img.size > 0:
@@ -151,14 +151,14 @@ def show_video(my_video_path, self_camera = False):
                 break
     cap.release()
     cv2.destroyAllWindows()
-    ret_background = draw_trail(img_height, img_width)
+    # ret_background = draw_trail(img_height, img_width)
     
         
-    cv2.imshow("route", ret_background)
-    if cv2.waitKey(0) & 0xFF == ord('q'):
-        cv2.destroyAllWindows()
-        cap.release()
-        return
+    # cv2.imshow("route", ret_background)
+    # if cv2.waitKey(0) & 0xFF == ord('q'):
+    #     cv2.destroyAllWindows()
+    #     cap.release()
+    #     return
 
 def show_video_from_http(url):
     stream = urllib.request.urlopen(url)

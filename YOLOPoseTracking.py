@@ -8,6 +8,7 @@ import math
 import time
 import cv2
 import mysql.connector
+from PIL import Image
 
 class state(Enum):
     ready = 0
@@ -103,7 +104,7 @@ class action_state(object):
         # 畫面正中央 - 休息時間
         if self.__current_state__ is state.end and self.__time_counter__ is not None:
             if self.__set_indicator__ < self.__target_set_count__:
-                rest_text = f"Rest Time: {self.__target_rest_time__}s"
+                rest_text = f"Rest Time: {self.__target_rest_time__[self.__set_indicator__]}s"
                 (text_width, text_height), baseline = cv2.getTextSize(rest_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
                 
                 text_x = (width - text_width) // 2
@@ -113,13 +114,13 @@ class action_state(object):
                 (text_width, text_height), baseline = cv2.getTextSize(rest_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
                 
             # # 半透明背景
-            # overlay = image.copy()
-            # cv2.rectangle(overlay, 
-            #             (text_x - 10, text_y - text_height - 10),
-            #             (text_x + text_width + 10, text_y + 10),
-            #             (0, 0, 0), -1)
-            # alpha = 0.6 #透明度
-            # image = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0) #混合圖像
+            overlay = image.copy()
+            cv2.rectangle(overlay, 
+                        (text_x - 10, text_y - text_height - 10),
+                        (text_x + text_width + 10, text_y + 10),
+                        (0, 0, 0), -1)
+            alpha = 0.6 #透明度
+            image = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0) #混合圖像
             
             text_x = (width - text_width) // 2
             text_y = height // 2
@@ -235,8 +236,8 @@ class action_state(object):
         # print(self.__joint_angle__2(right_elbow, right_wrist, right_shoulder))
         # print(self.repetition)
 
-        if (self.__joint_angle__(left_elbow, left_wrist, left_shoulder) > 130 and
-            self.__joint_angle__(right_elbow, right_wrist, right_shoulder) > 130):
+        if (self.__joint_angle__(left_elbow, left_wrist, left_shoulder) > 120 and
+            self.__joint_angle__(right_elbow, right_wrist, right_shoulder) > 120):
             self.repetition += 1
             self.__next_state__()
             #self.__set_recorder__.append(self.__calculate_score__())
