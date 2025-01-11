@@ -93,8 +93,17 @@ class action_state(object):
                     (width - text_width - 10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         
         # 畫面下方中央 - 疲勞警告（類似字幕位置）
-        if self.__fail_flag__ and self.__current_state__ is state.ready:
+        if self.__fail_flag__ and self.__current_state__ is state.end:
             warning_text = "Warning: 檢測到疲勞狀態！重新開始"
+            (text_width, text_height), baseline = cv2.getTextSize(warning_text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)
+
+            text_x = (width - text_width) // 2
+            text_y = int(height * 0.85)
+            cv2.putText(image, warning_text,
+                        (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+        
+        if self.__fail_counter__ >= 2 and self.__fail_flag__:
+            warning_text = "Warning: 連續動作失敗超過兩次，建議結束本次訓練！"
             (text_width, text_height), baseline = cv2.getTextSize(warning_text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)
 
             text_x = (width - text_width) // 2
@@ -434,9 +443,9 @@ class action_state(object):
             self.__current_state__ = state.action
         elif self.__current_state__.value == 1 and finish:
             if self.__fail_flag__ and self.__fail_counter__ < 2:
-                self.__current_state__ = state.ready#如果失敗，則回到ready
+                self.__current_state__ = state.end #如果失敗，則回到ready
             else:
-                self.__current_state__ = state.end#如果成功或失敗兩次，則進入休息狀態
+                self.__current_state__ = state.end #如果成功或失敗兩次，則進入休息狀態
         elif self.__current_state__.value == 2 and not finish:
             self.__current_state__ = state.start
         elif self.__current_state__.value == 2 and finish:
