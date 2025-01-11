@@ -321,6 +321,7 @@ class action_state(object):
             self.__time_counter__.start()
         elif self.__set_indicator__ + 1 == self.__target_set_count__:
             print(f"目標組數完成, Congratulation!")
+            self.insert_data_to_db()
 
     def __exhaustion__(self) -> bool:
         """
