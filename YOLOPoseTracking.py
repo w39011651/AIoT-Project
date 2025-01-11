@@ -29,7 +29,7 @@ class action_state(object):
     __exhaustion_event__ = threading.Event()
     
     __ACTION_OFFSET__ = 100 #動作高點(可能需可變?)
-    __exhaustion_threshold__ = 5000 #疲勞時間閾值
+    __exhaustion_threshold__ = 5 #疲勞時間閾值
     __MOVE_THRESHOLD__ = 100 #超過此值視為偵測錯誤
     
     __db_connection__ = None
@@ -93,8 +93,8 @@ class action_state(object):
                     (width - text_width - 10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         
         # 畫面下方中央 - 疲勞警告（類似字幕位置）
-        if self.__fail_flag__ and self.__current_state__ is state.action:
-            warning_text = "Warning: 檢測到疲勞狀態！進入休息階段"
+        if self.__fail_flag__ and self.__current_state__ is state.ready:
+            warning_text = "Warning: 檢測到疲勞狀態！重新開始"
             (text_width, text_height), baseline = cv2.getTextSize(warning_text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)
 
             text_x = (width - text_width) // 2
@@ -153,6 +153,11 @@ class action_state(object):
         如果手腕在肩膀上方,進入start
         """
         if self.__current_state__ is not state.ready:
+            return
+        
+        if self.__fail_counter__ and self.__fail_flag__:
+            print("動作失敗, 請重新開始")
+            self.__fail_flag__ = False
             return
                 
         is_shoulder_press = self.__is_shoulder_press__(keypoints)
@@ -304,9 +309,6 @@ class action_state(object):
         if self.__current_state__ is not state.end or self.__time_counter__ is not None: 
             return
 
-        if self.__fail_counter__ and self.__fail_flag__:
-            print("動作失敗, 請重新開始")
-            return
         if self.__fail_counter__ >= 2 and self.__fail_flag__:
             print("連續動作失敗超過兩次，建議結束本次訓練！")
             return
@@ -327,7 +329,9 @@ class action_state(object):
         """
         疲勞判斷
         """
-        if time.time() - self.__current_time__ >= self.__exhaustion_threshold__:
+        time_diff = time.time() - self.__current_time__
+        print(f"疲勞時間:{time_diff}")
+        if time_diff >= self.__exhaustion_threshold__:
             print("檢測到疲勞狀態！進入休息階段")
             self.__fail_counter__ += 1
             return True
@@ -429,7 +433,10 @@ class action_state(object):
         elif self.__current_state__.value == 1 and not finish:
             self.__current_state__ = state.action
         elif self.__current_state__.value == 1 and finish:
-            self.__current_state__ = state.end
+            if self.__fail_flag__ and self.__fail_counter__ < 2:
+                self.__current_state__ = state.ready#如果失敗，則回到ready
+            else:
+                self.__current_state__ = state.end#如果成功或失敗兩次，則進入休息狀態
         elif self.__current_state__.value == 2 and not finish:
             self.__current_state__ = state.start
         elif self.__current_state__.value == 2 and finish:
