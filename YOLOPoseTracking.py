@@ -28,11 +28,11 @@ class action_state(object):
     __exhaustion_event__ = threading.Event()
     
     __ACTION_OFFSET__ = 100 #動作高點(可能需可變?)
-    __exhaustion_threshold__ = 5 #疲勞時間閾值
+    __exhaustion_threshold__ = 5000 #疲勞時間閾值
     __MOVE_THRESHOLD__ = 100 #超過此值視為偵測錯誤
     
     __db_connection__ = None
-    __set_indicator__ = 1 #第幾組 #當前組數
+    __set_indicator__ = 0 #第幾組 #當前組數
     __target_set_count__ = 0 #目標組數
     __target_repetition__ = [] #from SQL #目標重複次數
     __target_rest_time__ = [] #目標休息時間(from SQL)
@@ -79,11 +79,11 @@ class action_state(object):
         # 右上角 - 組數和重複次數
         group_text = ""
         
-        group_text = f"Group: {self.__set_indicator__}/{self.__target_set_count__}"
+        group_text = f"Group: {self.__set_indicator__+1}/{self.__target_set_count__}"
         (text_width, text_height), baseline = cv2.getTextSize(group_text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
         
         if self.__current_state__ is not state.end and self.repetition is not None: #如果不在休息狀態，加入重複次數
-            group_text += f" Rep: {self.repetition}/{self.__target_repetition__[self.__set_indicator__-1]}"
+            group_text += f" Rep: {self.repetition}/{self.__target_repetition__[self.__set_indicator__]}"
             (text_width, text_height), baseline = cv2.getTextSize(group_text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
         
         cv2.putText(image, group_text, 
@@ -101,13 +101,13 @@ class action_state(object):
         
         # 畫面正中央 - 休息時間
         if self.__current_state__ is state.end and self.__time_counter__ is not None:
-            if self.__set_indicator__ <= self.__target_set_count__:
+            if self.__set_indicator__ < self.__target_set_count__:
                 rest_text = f"Rest Time: {self.__target_rest_time__}s"
                 (text_width, text_height), baseline = cv2.getTextSize(rest_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
                 
                 text_x = (width - text_width) // 2
                 text_y = height // 2
-            elif self.__set_indicator__ == self.__target_set_count__:
+            elif self.__set_indicator__ + 1 == self.__target_set_count__:
                 rest_text = "目標組數完成, Congratulation!"
                 (text_width, text_height), baseline = cv2.getTextSize(rest_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
                 
@@ -199,8 +199,8 @@ class action_state(object):
             return
         
         if not self.__is_working__(keypoints):
-            self.__next_state__()
-            self.set_recorder.append(self.repetition)
+            # self.__next_state__()
+            # self.set_recorder.append(self.repetition)
             return
         
         try:
@@ -233,13 +233,14 @@ class action_state(object):
             self.__joint_angle__(right_elbow, right_wrist, right_shoulder) > 130):
             self.repetition += 1
             self.__next_state__()
+            #self.__set_recorder__.append(self.__calculate_score__())
 
         is_exhaustion = self.__exhaustion__()
         if is_exhaustion:
             self.__fail_flag__ = True
             self.__next_state__(True)
-        else:
-            self.__next_state__()
+        # else:
+        #     self.__next_state__()
         
     def __eccentric__(self, keypoints):
         """
@@ -273,9 +274,9 @@ class action_state(object):
                 """在手腕移動不超過閾值時，才會被記錄"""
                 self.action_track.append([left_wrist, right_wrist])#全部動作的軌跡
 
-        if (self.__joint_angle__(left_elbow, left_wrist, left_shoulder) < 130 and
-            self.__joint_angle__(right_elbow, right_wrist, right_shoulder) < 130):
-            if self.repetition < self.__target_repetition__[self.__set_indicator__+1]:
+        if (self.__joint_angle__(left_elbow, left_wrist, left_shoulder) < 95 and
+            self.__joint_angle__(right_elbow, right_wrist, right_shoulder) < 95):
+            if self.repetition < self.__target_repetition__[self.__set_indicator__]:
                 self.__next_state__(False)
             else:
                 self.__next_state__(True)
@@ -291,22 +292,27 @@ class action_state(object):
         顯示: 第幾組、次數、休息時間、重量
         """
         self.repetition = None
+        
 
         if self.__current_state__ is not state.end or self.__time_counter__ is not None: 
             return
-        
-        if self.__fail_counter__ and not self.__fail_flag__:
+
+        if self.__fail_counter__ and self.__fail_flag__:
             print("動作失敗, 請重新開始")
             return
         if self.__fail_counter__ >= 2 and self.__fail_flag__:
             print("連續動作失敗超過兩次，建議結束本次訓練！")
             return
         
+        if self.__time_counter__ is None:
+            __set_score__ = self.__calculate_score__()
+            print(f"動作分數:{__set_score__}")
+            self.__score_record__.append(__set_score__)
         #休息時間計時
-        if self.__set_indicator__ < self.__target_set_count__:
+        if self.__set_indicator__ < self.__target_set_count__ - 1:
             self.__time_counter__ = threading.Thread(target=self.__timer__)
             self.__time_counter__.start()
-        elif self.__set_indicator__ == self.__target_set_count__:
+        elif self.__set_indicator__ + 1 == self.__target_set_count__:
             print(f"目標組數完成, Congratulation!")
 
     def __exhaustion__(self) -> bool:
@@ -327,7 +333,7 @@ class action_state(object):
         while rest_time < self.__target_rest_time__:
             time.sleep(1)
             rest_time += 1
-            print(f"第{self.__set_indicator__}組結束, 休息時間:{rest_time}秒")
+            print(f"第{self.__set_indicator__+1}組結束, 休息時間:{rest_time}秒")
         self.__set_indicator__ += 1
         self.__next_state__()
         self.__time_counter__ = None
@@ -459,7 +465,9 @@ class action_state(object):
             distance2 = abs(coefficient_a2*right_pt[0]+coefficient_b2*right_pt[1]-coefficient_c2)/math.sqrt(pow(coefficient_a2,2)+pow(coefficient_b2,2))
             total_distance = total_distance + distance1 + distance2
             #分數: score = 100 - coefficient\times\sum_{i=1}^{n} distance
+        total_distance = total_distance/len(self.action_track)#取平均距離
         self.action_track.clear()
+        
         return 0.5*total_distance
 
     def __two_point_distance__(self, pt1, pt2)->float:
@@ -481,7 +489,7 @@ class action_state(object):
         """
         with self.__db_connection__ as conn:
             cursor=conn.cursor(dictionary=True, buffered=True)
-            cursor.execute("SELECT * FROM workout_data")
+            cursor.execute("SELECT * FROM workout_data ORDER BY id DESC LIMIT 1")
             last_action = cursor.fetchone()#找到最後一筆資料
             cursor.reset()
             if last_action:

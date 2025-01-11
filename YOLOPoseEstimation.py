@@ -141,8 +141,8 @@ def show_video(my_video_path, self_camera = False):
         person_pose = result[0][0] #偵測人數n : person_pose = result[0][:n+1]
         #透視變換要偵測2次，可能會影響效能
         img = plot_keypoints(img, person_pose.keypoints)
-        if prev_person_pose is not None:
-            img = plot_track(img, person_pose.keypoints, prev_person_pose.keypoints)
+        # if prev_person_pose is not None:
+        #     img = plot_track(img, person_pose.keypoints, prev_person_pose.keypoints)
         prev_person_pose = person_pose
         #判定動作品質
         if img is not None and img.size > 0:
@@ -190,7 +190,7 @@ if __name__ == '__main__':
     HORIZON_MOVE_THRESHOULD = 10.0
     shoulder_press_judger = action_state()
     #print("Person Detection Model Device:", predictor_person_detection.model.device)
-    shoulder_press_judger.test_method()
+    #shoulder_press_judger.test_method()
     #exit()
     #show_video(video_path, False)
     show_video(video_path, True)
