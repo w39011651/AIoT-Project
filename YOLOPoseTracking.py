@@ -45,6 +45,7 @@ class action_state(object):
     __fail_flag__ = False #失敗標誌
     __current_time__ = 0 #當前時間
     __exhaustion_counter__ = threading.Event() #疲勞標誌
+    __time_flag__ = False #時間標誌 #避免time()重複賦予
 
     def test_method(self):
         self.__target_set_count__ = 3
@@ -152,6 +153,8 @@ class action_state(object):
         if self.__current_state__ is not state.ready:
             return
         
+        self.__time_flag__ = False
+        
         is_shoulder_press = self.__is_shoulder_press__(keypoints)
         
         if is_shoulder_press:
@@ -193,7 +196,10 @@ class action_state(object):
         左手track加入到action_track[0],右手track加入到action_track[1]
         """
         self.__fail_flag__ = False
-        self.__current_time__ = time.time()
+        
+        if self.__time_flag__ is False:
+            self.__current_time__ = time.time()
+            self.__time_flag__ = True
         
         if self.__current_state__ is not state.start:
             return
@@ -251,6 +257,8 @@ class action_state(object):
         if self.__current_state__ is not state.action:
             return
         
+        self.__time_flag__ = False
+        
         try:
             left_wrist = list(map(int,keypoints.xy[0][sp_idx.left_wrist.value][:2]))
             right_wrist = list(map(int,keypoints.xy[0][sp_idx.right_wrist.value][:2]))
@@ -292,7 +300,6 @@ class action_state(object):
         顯示: 第幾組、次數、休息時間、重量
         """
         self.repetition = None
-        
 
         if self.__current_state__ is not state.end or self.__time_counter__ is not None: 
             return
@@ -330,7 +337,7 @@ class action_state(object):
         """
         rest_time = 0
 
-        while rest_time < self.__target_rest_time__:
+        while rest_time < self.__target_rest_time__[self.__set_indicator__]:
             time.sleep(1)
             rest_time += 1
             print(f"第{self.__set_indicator__+1}組結束, 休息時間:{rest_time}秒")
