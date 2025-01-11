@@ -154,9 +154,7 @@ class action_state(object):
         """
         if self.__current_state__ is not state.ready:
             return
-        
-        self.__time_flag__ = False
-        
+                
         is_shoulder_press = self.__is_shoulder_press__(keypoints)
         
         if is_shoulder_press:
@@ -240,12 +238,14 @@ class action_state(object):
         if (self.__joint_angle__(left_elbow, left_wrist, left_shoulder) > 120 and
             self.__joint_angle__(right_elbow, right_wrist, right_shoulder) > 120):
             self.repetition += 1
+            self.__time_flag__ = False
             self.__next_state__()
             #self.__set_recorder__.append(self.__calculate_score__())
 
         is_exhaustion = self.__exhaustion__()
         if is_exhaustion:
             self.__fail_flag__ = True
+            self.__time_flag__ = False
             self.__next_state__(True)
         # else:
         #     self.__next_state__()
@@ -258,8 +258,6 @@ class action_state(object):
         """
         if self.__current_state__ is not state.action:
             return
-        
-        self.__time_flag__ = False
         
         try:
             left_wrist = list(map(int,keypoints.xy[0][sp_idx.left_wrist.value][:2]))
@@ -332,7 +330,8 @@ class action_state(object):
             print("檢測到疲勞狀態！進入休息階段")
             self.__fail_counter__ += 1
             return True
-
+        return False
+    
     def __timer__(self):
         """
         計時器
