@@ -6,7 +6,7 @@
 
 - Raspberry pi
 - WebCam
-- LED \(\times\) 4
+- LED $$\times$$ 4
 - 電腦 (顯示卡NVIDIA GeForce GTX 1650 with Max-Q Design): 處理影像畫面
 - 電腦: 資料庫監控
 
